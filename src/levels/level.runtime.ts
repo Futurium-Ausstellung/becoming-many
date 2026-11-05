@@ -19,6 +19,7 @@ import {
   composeControls,
   composeLevel,
   composePlayback,
+  composeVeil,
   composeWorld,
   type LoadedLevelAssets,
   loadLevelAssets,
@@ -74,6 +75,9 @@ class LevelRun {
   private tutorialAssets: LoadedLevelAssets | undefined;
   private handoffElapsed: number | undefined;
   private mainFieldOfViewDegrees = 0;
+  private veil: ReturnType<typeof composeVeil> | undefined;
+  /** 1 is white, 0 is the world; it falls only while playback runs. */
+  private veilPresence = 1;
   private readonly showListeners = new Set<
     (show: RunningShow | undefined) => void
   >();
@@ -121,6 +125,7 @@ class LevelRun {
       this.level.desktopFieldOfViewDegrees ?? this.world.camera.fov;
     this.mainFieldOfViewDegrees = fieldOfViewDegrees;
     this.present(presentation, fieldOfViewDegrees);
+    this.raiseVeil();
     await this.loadComposition();
     this.signal.throwIfAborted();
     this.controls = composeControls(this.world, this.worldSurface);
@@ -345,6 +350,7 @@ class LevelRun {
   /** Restart training in this Run; renderer, XR, controls and shared audio survive. */
   readonly resetShowAndFlight = (): void => {
     if (this.signal.aborted || this.tutorialRestart) return;
+    this.cutToWhite();
     this.tutorialHeld = true;
     this.tutorialFailed = false;
     this.controls?.resetRig();
@@ -470,9 +476,36 @@ class LevelRun {
     if (!this.tutorial && !this.tutorialRestart && !this.tutorialFailed)
       this.playback?.update();
     this.updateHandoff(deltaSeconds);
+    this.updateVeil(deltaSeconds);
     this.audio?.update();
     this.updateHeightLimits();
   };
+
+  /** A Show opens in white; static levels open on their world. */
+  private raiseVeil(): void {
+    if (this.request.kind !== "show") return;
+    this.veil = composeVeil(this.world);
+    this.world.modules.load(this.veil.module);
+    this.world.modules.activate(this.veil.module);
+  }
+
+  /** Stop leaves no fade: the world is gone in one frame. */
+  private cutToWhite(): void {
+    this.veilPresence = 1;
+    this.veil?.setPresence(1);
+  }
+
+  private updateVeil(deltaSeconds: number): void {
+    if (!this.veil || this.veilPresence === 0) return;
+    if (this.readPlayback() !== "playing") return;
+    this.veilPresence = Math.max(
+      0,
+      this.veilPresence -
+        Math.max(0, deltaSeconds) / HANDOFF_SETTINGS.veilLiftSeconds,
+    );
+    const lifted = 1 - this.veilPresence;
+    this.veil.setPresence(1 - lifted * lifted * (3 - 2 * lifted));
+  }
 
   private updateFlight(deltaSeconds: number): void {
     this.controls?.flight.update(
@@ -545,6 +578,7 @@ class LevelRun {
       ...[...this.modules]
         .reverse()
         .map((module) => () => this.world?.modules.unload(module)),
+      () => this.veil && this.world?.modules.unload(this.veil.module),
       () => this.audio?.unload(),
       ...assetReleases(this.assets),
       () => this.world?.unload(),

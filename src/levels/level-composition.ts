@@ -76,6 +76,7 @@ import { createVegetationModule } from "../modules/vegetation/vegetation";
 import { VEGETATION_DEFINITION } from "../modules/vegetation/vegetation-definition";
 import { createVegetationConnectionSource } from "../modules/vegetation/vegetation-nodes";
 import { createVegetationScentSource } from "../modules/vegetation/vegetation-scent";
+import { createWhiteVeil } from "../modules/white-veil/white-veil";
 import {
   createWorldFade,
   type WorldFadeEffect,
@@ -864,6 +865,11 @@ export function composeWorld(surface: WorldViewport): World {
   return createWorld(surface, {
     xrViewPitchAssistDegrees: XR_VIEW_PITCH_ASSIST_DEGREES,
   });
+}
+
+/** The white a Show waits in before Play and returns to on Stop. */
+export function composeVeil(world: World) {
+  return createWhiteVeil({ scene: world.scene, viewpoint: world.viewpoint });
 }
 
 /** Bind input owners to the rig and release unpublished resources after failure. */

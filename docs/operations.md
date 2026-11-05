@@ -30,10 +30,13 @@ flags and limitations live in [KIOSK.md](../KIOSK.md).
 ## Operator playback and language
 
 Conductor waits for Play at the opening of the main Show; no tutorial runs first.
+The headset shows plain white until Play; the world then fades in over a few
+seconds.
 EN/DE is available before Play and throughout the Show. Language changes replace
 speech in place; they do not pause playback or reset flight and progress. An
-already paused experience stays paused. Stop rewinds the Show, returns flight to
-its opening pose, holds until Play and retains the selected language.
+already paused experience stays paused. Stop cuts the picture to white at once,
+rewinds the Show, returns flight to its opening pose, holds until Play and
+retains the selected language.
 
 The selected button represents the requested language. While its file loads,
 the previous recording continues; a failed replacement leaves that recording

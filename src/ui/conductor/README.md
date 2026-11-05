@@ -85,8 +85,9 @@ in `dramaturgy`; device validity remains in M5.
 
 The Conductor initially waits for Play at the opening of the main Show; its entry
 requests no tutorial, so the timeline shows no Tutorial chapter. Play/Pause
-controls the main Show through Run. Stop rewinds the main Show, returns flight to
-its opening pose and holds until Play. The readout distinguishes running, paused,
+controls the main Show through Run. The picture is white until Play, then fades
+in. Stop cuts to white, rewinds the main Show, returns flight to its opening pose
+and holds until Play. The readout distinguishes running, paused,
 loading, buffering, blocked audio and retryable errors. The selected main Show
 language is retained. The timeline is the only time display. Language is available
 before Play and throughout the main Show. Changes replace speech in place,
