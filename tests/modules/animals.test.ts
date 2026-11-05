@@ -572,3 +572,50 @@ function getDirectionIndex(worldX: number, worldZ: number): number {
   const positiveAngle = (angle + fullCircleRadians) % fullCircleRadians;
   return Math.floor((positiveAngle / fullCircleRadians) * 4);
 }
+
+test("Animals keep walking while warming but report bodies only when shown", () => {
+  const scene = new Scene();
+  const viewpoint: Viewpoint = {
+    worldPosition: new Vector3(),
+    worldBodyDirection: new Vector3(0, 0, -1),
+    worldDirection: new Vector3(0, 0, -1),
+    worldUp: new Vector3(0, 1, 0),
+    viewHalfAngleRadians: Math.PI / 4,
+    viewDistanceMeters: DEFAULT_VIEW_DISTANCE_METERS,
+  };
+  let reports = 0;
+  const module = createAnimalsModule({
+    scene,
+    viewpoint,
+    definition: DEFINITION,
+    preset: PRESET,
+    assets: createAnimalAssets(),
+    worldSurface: createFlatSurface(),
+    onBodiesUpdated: () => {
+      reports += 1;
+    },
+  });
+
+  // Loaded but put away is the warming state a show holds a layer in before
+  // its sense reveals it: the population walks, but prints no scent trails.
+  module.load();
+  const population = scene.children[0];
+  if (!(population instanceof Group)) throw new Error("Expected animal Group");
+  const before = readActorPositions(population);
+  for (let step = 0; step < 30; step += 1) module.update?.(1 / 10);
+  expect(reports).toBe(0);
+  expect(readActorPositions(population)).not.toEqual(before);
+
+  module.activate();
+  module.update?.(1 / 60);
+  expect(reports).toBe(1);
+  module.unload();
+});
+
+function readActorPositions(population: Group): number[] {
+  return population.children.flatMap(({ position }) => [
+    position.x,
+    position.y,
+    position.z,
+  ]);
+}

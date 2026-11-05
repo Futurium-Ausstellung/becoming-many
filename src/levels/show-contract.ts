@@ -55,6 +55,8 @@ export interface ShowWorld {
   readonly renderer: Pick<WebGLRenderer, "setClearColor">;
   readonly modules: {
     readonly activate: (module: WorldModule) => void;
+    /** Run a module hidden, so its content is built before it is shown. */
+    readonly warm: (module: WorldModule) => void;
     readonly deactivate: (module: WorldModule) => void;
   };
   readonly viewpoint: {
@@ -68,6 +70,13 @@ type SenseDrivers = Readonly<
 
 /** Narrow reach from show policy into the world composed by Level Runtime. */
 export interface ShowWorldReach {
+  /**
+   * The modules each sense puts up or away. A gated module is seen exactly
+   * while its sense carries strength, so a fading-out module keeps rendering
+   * until it has fully dissolved, and it already runs hidden through the
+   * prewarm window before the sense arrives. Ungated modules stay up for every
+   * world state as the neutral baseline.
+   */
   readonly gates: ReadonlyMap<ShowSense, readonly WorldModule[]>;
   readonly senses: SenseDrivers;
   readonly worldFades: {

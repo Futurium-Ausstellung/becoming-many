@@ -33,6 +33,7 @@ import {
   type ShowLevelState,
   type ShowSense,
   senseIntensityAt,
+  senseStandingAt,
   showLevelAt,
 } from "../dramaturgy/show-levels";
 import type { NarrationPlayer, NarrationRecording } from "../sound/playback";
@@ -165,11 +166,26 @@ class Show implements ShowRuntime, RunningShow {
     reach.setSkyBackground?.(this.liveBackground);
   }
 
-  private setSense(sense: ShowSense, intensity: number): void {
+  private setSense(sense: ShowSense, intensity: number, seconds: number): void {
     const { reach, world } = this.options;
     reach.senses[sense]?.(intensity);
-    for (const module of reach.gates.get(sense) ?? []) {
-      if (intensity > 0) world.modules.activate(module);
+    // Standing, not strength: a gated layer is put up one prewarm window
+    // before its sense arrives, hidden, so the fade raises finished content.
+    const modules = reach.gates.get(sense) ?? [];
+    const standing =
+      intensity > 0
+        ? "live"
+        : modules.length === 0
+          ? "away"
+          : senseStandingAt(
+              this.request.schedule,
+              this.request.states,
+              sense,
+              seconds,
+            );
+    for (const module of modules) {
+      if (standing === "live") world.modules.activate(module);
+      else if (standing === "warming") world.modules.warm(module);
       else world.modules.deactivate(module);
     }
     if (sense === "echo") reach.worldFades.structure?.setPresence(intensity);
@@ -194,6 +210,7 @@ class Show implements ShowRuntime, RunningShow {
           sense,
           seconds,
         ),
+        seconds,
       );
     this.options.reach.setEndCreditsPresence?.(
       endCreditsPresenceAt(this.request.schedule, seconds),

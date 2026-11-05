@@ -365,6 +365,32 @@ describe("Fly swarms", () => {
     }
     swarms.dispose();
   });
+
+  test("spreads each fly's place in the sense fade so swarms gather speck by speck", () => {
+    const parameters = createMotionParameters();
+    const swarms = createFlySwarms({
+      parameters,
+      groundYAt: () => 0,
+      zoneAt: () => "meadow",
+      initialPlayerX: 0,
+      initialPlayerZ: 0,
+    });
+    const senseArrival = swarms.points.geometry.getAttribute("flySenseArrival");
+
+    expect(senseArrival.count).toBe(
+      parameters.swarms.swarmCount * parameters.swarms.fliesPerSwarm,
+    );
+    const values = new Set<number>();
+    for (let fly = 0; fly < senseArrival.count; fly += 1) {
+      const value = senseArrival.getX(fly);
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThan(1);
+      values.add(value);
+    }
+    // One shared value would put the whole field on screen in one frame.
+    expect(values.size).toBeGreaterThan(senseArrival.count / 2);
+    swarms.dispose();
+  });
 });
 
 describe("Swarm shape", () => {

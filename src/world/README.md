@@ -33,8 +33,14 @@ rig movement rather than camera look and will not add another flight model,
 runtime, or loop.
 
 `module-runtime.ts` owns the lifecycle
-`load → activate → update → deactivate → unload`. Loading creates fixed CPU/GPU
-resources; streaming recycles them. Modules never create animation loops.
+`load → warm → activate → update → deactivate → unload`. Loading creates fixed
+CPU/GPU resources; streaming recycles them. Modules never create animation
+loops.
+
+`warm` runs a module without showing it: `update` reaches a warming module
+exactly as it reaches an active one, while nothing of it is drawn. Building,
+streaming, and simulating therefore never depend on a module's own visibility,
+and a show can stand a layer up before the sense that reveals it.
 
 ## Spatial Windows
 

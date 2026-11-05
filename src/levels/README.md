@@ -78,8 +78,12 @@ modules do not import siblings; Level Composition performs cross-boundary
 wiring.
 
 During a show, the schedule selects a `ShowLevelState` and drives module
-activation, sense intensity, background blending, and World Fade without
-recreating the composition or rereading the construction preset. The opening
+standing, sense intensity, background blending, and World Fade without
+recreating the composition or rereading the construction preset. Standing is
+wider than strength: a gated module is warmed `SENSE_PREWARM_SECONDS` before the
+sense that reveals it — running, following the viewer, and drawn by nothing — so
+what the fade raises is already built. A seek straight into a cue gets no
+warming. The opening
 show state is applied before modules size fixed spatial
 windows; later states remain driven by the same schedule and state map. Flight
 remains constrained against the shared surface through White World and every
