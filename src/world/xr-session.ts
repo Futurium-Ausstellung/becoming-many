@@ -16,6 +16,21 @@ import type { WebGLRenderer } from "three";
 // it; a runtime without it falls back to the default reference space.
 const SESSION_INIT: XRSessionInit = { optionalFeatures: ["local-floor"] };
 
+/**
+ * Three.js picks a projection layer whenever the browser exposes the method,
+ * without checking that the session enabled `layers`. Without that feature the
+ * browser accepts the layer and never delivers an XR frame: a visible session
+ * that leaves the headset on the runtime's empty grid. Removing the method
+ * makes Three.js adopt the session through XRWebGLLayer instead.
+ */
+export function useBaseLayerWithoutLayersFeature(session: {
+  readonly enabledFeatures?: readonly string[];
+}): void {
+  if (session.enabledFeatures?.includes("layers")) return;
+  if (typeof XRWebGLBinding === "undefined") return;
+  Reflect.deleteProperty(XRWebGLBinding.prototype, "createProjectionLayer");
+}
+
 export function createXrSessionControl(
   renderer: WebGLRenderer,
 ): XrSessionControl {
@@ -108,6 +123,7 @@ export function createXrSessionControl(
       return;
     }
     try {
+      useBaseLayerWithoutLayersFeature(session);
       await renderer.xr.setSession(session);
     } catch (reason) {
       try {
