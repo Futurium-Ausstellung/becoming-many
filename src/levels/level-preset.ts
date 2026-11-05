@@ -13,6 +13,7 @@ import type { MotionSenseParameters } from "../modules/motion-sense/motion-sense
 import type { ConnectionsParameters } from "../modules/mycelium/mycelium";
 import type { RocksPreset } from "../modules/rocks/rocks";
 import type { ScentParticlesParameters } from "../modules/scent-particles/scent-particles";
+import type { SnakesPreset } from "../modules/snakes/snakes";
 import type { FlightGuidanceParameters } from "../modules/start/flight-guidance";
 import type { AirParticlesParameters } from "../modules/start/point-cloud/point-cloud.module";
 import type { StaticPopulationPreset } from "../modules/static-population";
@@ -36,6 +37,7 @@ export type WorldComposition = {
   readonly grassClipmap?: GrassClipmapPreset;
   readonly rocks?: RocksPreset;
   readonly animals?: AnimalsPreset;
+  readonly snakes?: SnakesPreset;
   readonly echoDepth?: EchoDepthParameters;
   readonly motion?: MotionSenseParameters;
   readonly thermal?: ThermalPerceptionParameters;

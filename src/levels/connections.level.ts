@@ -207,6 +207,19 @@ export const level: LevelPreset = {
       featureColor: 0x101010,
     },
   },
+  snakes: {
+    /*
+     * Test value: a little over half the places the candidate grid offers carry
+     * a snake, which is far more snake than a meadow holds — it is here so a
+     * run-through finds one while the crawl is being judged. The ground still
+     * refuses most of what survives this draw: water, a bank too steep to
+     * follow, and the weight of the ground itself.
+     */
+    crawlingShare: 0.56,
+    // The palette's hot stop: a basking snake is among the warmest things on
+    // a meadow, and the one the ground's own cold makes unmistakable.
+    color: 0xfb5f16,
+  },
   thermal: {
     intensity: 1,
     radiusMeters: 35,

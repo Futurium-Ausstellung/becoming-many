@@ -67,6 +67,7 @@ test("each world component appears only in its intended levels", () => {
     ],
     ["motion", "motion thermal magnetic connections"],
     ["animals", "thermal magnetic connections diagnostic visual-integration"],
+    ["snakes", "thermal magnetic connections"],
     ["thermal", "thermal magnetic connections"],
     ["magnetic", "magnetic connections diagnostic"],
     ["connections", "connections"],
@@ -452,4 +453,18 @@ test("a scheduled swarm passage carries the layer that prints it", () => {
 
   expect(swarmScheduled).toBe(true);
   expect(connectionsLevel.motion).toBeDefined();
+});
+
+test("the heat levels carry the same snakes from the Thermal cue on", () => {
+  for (const heatLevel of [
+    LEVEL_CATALOG.thermal,
+    LEVEL_CATALOG.magnetic,
+    LEVEL_CATALOG.connections,
+  ]) {
+    expect(heatLevel.snakes).toEqual({ crawlingShare: 0.56, color: 0xfb5f16 });
+  }
+  // A basking snake reads in the heat palette's hot stop.
+  expect(LEVEL_CATALOG.thermal.snakes?.color).toBe(
+    LEVEL_CATALOG.thermal.thermal?.colors.hotColor,
+  );
 });

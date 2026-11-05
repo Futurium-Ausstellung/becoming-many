@@ -15,10 +15,13 @@ dispose everything they create.
 
 - Terrain renders World Surface height in recycled meshes.
 - Vegetation and Rocks render deterministic compact instanced populations.
-- Animals owns ten bounded actors, visibility, animation, and movement.
+- Animals owns twenty bounded actors, visibility, animation, and movement.
+- Snakes owns one instanced pool of procedurally rebuilt bodies that crawl
+  open ground, streamed through the shared chunk window and candidate grid.
 - Air and Scent Particles own bounded points buffers.
 - Grass Clipmap is the sole grass renderer for narrative and diagnostic presets.
-- Motion Sense owns point actors and GPU-aged trail rings.
+- Motion Sense owns point actors, GPU-aged trail rings, and an optional
+  instanced pool of bird bodies.
 - Magnetic Sense owns one camera-following sky dome and patches no sibling.
 - Mycelium/Connections owns fixed network draws and a module-specific topology
   worker.
