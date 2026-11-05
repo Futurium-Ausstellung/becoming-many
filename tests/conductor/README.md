@@ -20,7 +20,10 @@ the initially paused tutorial, delayed/failed speech, rapid selection and cleanu
 Stop restarts the tutorial on the same Run; language replacement never restarts
 it. Neither check establishes full visitor-lifecycle acceptance under #9.
 `stream-button.test.ts` covers the whole availability × session matrix behind
-the headset button's one label. `time-format.test.ts` covers the readouts an
+the headset button's one state. `operator-language.test.ts` pins which page
+language a station opens in; `conductor-copy.test.ts` keeps both catalogues
+complete, names every piece cue and matches every `data-copy` key declared in
+`src/ui/conductor.html`. `time-format.test.ts` covers the readouts an
 operator scans mid-show, chapter names included.
 
 Slot and headroom arithmetic is not here either — it belongs to the schedule it

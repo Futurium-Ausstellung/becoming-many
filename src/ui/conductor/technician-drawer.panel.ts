@@ -1,7 +1,12 @@
 import type { Run } from "../../levels/run-contract";
 import type { M5Observation } from "../../m5/m5-contract";
 import { M5_FIRMWARE_VERSION } from "../../m5/protocol";
-import { requireElement, writeText } from "../shared/dom";
+import { requireElement, writeAttribute, writeText } from "../shared/dom";
+import {
+  type ConductorCopy,
+  OPERATOR_LANGUAGES,
+  type OperatorLanguage,
+} from "./conductor-copy";
 import { bindConfirmation } from "./confirmation";
 import { CONDUCTOR_SETTINGS } from "./operator-settings";
 import type { ConductorPanel } from "./view-state";
@@ -12,6 +17,8 @@ export interface TechDrawerOptions {
   readonly signal: AbortSignal;
   readonly run: Pick<Run, "show" | "resetFlight">;
   readonly reloadPage: () => void;
+  /** The page's own language; the narration language is a separate choice. */
+  readonly onOperatorLanguageChange: (language: OperatorLanguage) => void;
 }
 
 export interface TechDrawer {
@@ -26,6 +33,7 @@ export function createTechDrawer({
   signal,
   run,
   reloadPage,
+  onOperatorLanguageChange,
 }: TechDrawerOptions): TechDrawer {
   const root = requireElement(parent, ".conductor__drawer", HTMLDialogElement);
   const closeButton = requireElement(
@@ -79,12 +87,26 @@ export function createTechDrawer({
     "[data-reset-flight]",
     HTMLButtonElement,
   ).addEventListener("click", run.resetFlight, { signal });
-  bindConfirmation(
+  const reload = bindConfirmation(
     requireElement(root, ".conductor__reload-button", HTMLButtonElement),
     "Tap again to reload",
     reloadPage,
     signal,
   );
+  const operatorLanguageButtons = OPERATOR_LANGUAGES.map((operatorLanguage) => {
+    const button = requireElement(
+      root,
+      `[data-operator-language="${operatorLanguage}"]`,
+      HTMLButtonElement,
+    );
+    button.addEventListener(
+      "click",
+      () => onOperatorLanguageChange(operatorLanguage),
+      { signal },
+    );
+    return button;
+  });
+  let appliedCopy: ConductorCopy | undefined;
   const controllerState = requireElement(
     root,
     "[data-m5-state]",
@@ -115,14 +137,30 @@ export function createTechDrawer({
           );
         });
 
+        operatorLanguageButtons.forEach((button, index) => {
+          writeAttribute(
+            button,
+            "aria-pressed",
+            String(OPERATOR_LANGUAGES[index] === state.copy.language),
+          );
+        });
+
         writeText(m5, m5Text(state.m5));
-        if (receivedState !== state.m5?.receivedState) {
+        const copyChanged = appliedCopy !== state.copy;
+        if (copyChanged) {
+          appliedCopy = state.copy;
+          reload.setLabels(
+            state.copy.drawer.reload,
+            state.copy.drawer.reloadArmed,
+          );
+        }
+        if (copyChanged || receivedState !== state.m5?.receivedState) {
           receivedState = state.m5?.receivedState;
           writeText(
             controllerState,
             receivedState
               ? JSON.stringify(receivedState, null, 2)
-              : "No controller response yet.",
+              : state.copy.drawer.noControllerResponse,
           );
         }
         writeText(level, state.activeLevel);

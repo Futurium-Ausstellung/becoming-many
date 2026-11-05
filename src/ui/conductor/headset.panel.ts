@@ -4,7 +4,7 @@
  * wait for user activation. This panel neither owns XR nor repairs PC streaming.
  */
 import type { XrSessionControl, XrSessionState } from "../../world/xr-contract";
-import { requireElement, writeText } from "../shared/dom";
+import { requireElement, writeAttribute, writeText } from "../shared/dom";
 import { resolveStreamButton } from "./headset-button-state";
 import { CONDUCTOR_SETTINGS } from "./operator-settings";
 import type { ConductorPanel } from "./view-state";
@@ -98,20 +98,23 @@ export function createHeadsetPanel({
       state = view.xr;
       requestPicture();
       const resolved = resolveStreamButton(state);
+      const picture = view.copy.picture;
       const text = pending
         ? state.isSessionActive
-          ? "Picture: stopping"
-          : "Picture: connecting"
+          ? "stopping"
+          : "connecting"
         : needsGesture
-          ? "Picture: click to retry"
+          ? "retry"
           : resolved.label;
-      writeText(label, text);
+      writeText(label, picture.labels[text]);
       button.disabled = pending || !resolved.isEnabled;
       button.dataset.streaming = String(state.isSessionActive);
       button.setAttribute("aria-pressed", String(state.isSessionActive));
-      button.title = state.isSessionActive
-        ? "Stop headset picture"
-        : "Start headset picture";
+      writeAttribute(
+        button,
+        "title",
+        state.isSessionActive ? picture.stop : picture.start,
+      );
     },
   };
 }

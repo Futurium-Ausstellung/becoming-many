@@ -25,8 +25,11 @@ Chat with the user in German.
 
 Everything committed to this repository is written in English: code,
 identifiers, file names, comments, commit messages, documentation, and log
-output. German is limited to experience content such as `script/de.md`,
-narration assets, and audience-facing copy.
+output. German is limited to the words a person at the venue reads or hears:
+experience content such as `script/de.md`, narration assets, audience-facing
+copy, and the station's operator copy in `src/ui/conductor/conductor-copy.ts`.
+Everything around those catalogues, including their identifiers, comments and
+selection code, stays English.
 
 ## Branch Protection
 

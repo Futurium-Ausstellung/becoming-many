@@ -4,6 +4,9 @@
 `public/firmware/m5-controller/` through esp-web-tools. `src/ui/flash.html`
 declares the custom element, setup form and log and links `src/ui/app.css`.
 Flash remains scrollable and respects the library's Shadow DOM and dialogs.
+The Conductor's technician drawer links here in a new tab; the station window
+hosts the running show and must not navigate away. The page shares the
+Conductor's Rubik operator font.
 
 `flash.page.ts` binds inputs, displays connection/send states and keeps a bounded
 log. Form reads are pure; explicit persistence saves only SSID/device ID and

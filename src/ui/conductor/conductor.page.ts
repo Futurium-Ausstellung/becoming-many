@@ -1,6 +1,5 @@
 /** Mount the operator UI against existing owner commands and observations. */
 
-import alarmClockIcon from "lucide-static/icons/alarm-clock.svg?no-inline";
 import glassesIcon from "lucide-static/icons/glasses.svg?no-inline";
 import imageIcon from "lucide-static/icons/image.svg?no-inline";
 import pauseIcon from "lucide-static/icons/pause.svg?no-inline";
@@ -16,6 +15,7 @@ import type { NarrationSchedule } from "../../dramaturgy/narration-schedule";
 import type { Run } from "../../levels/run-contract";
 import type { XrSessionState } from "../../world/xr-contract";
 import { requireElement } from "../shared/dom";
+import { CONDUCTOR_COPY, type OperatorLanguage } from "./conductor-copy";
 import { createHeadsetPanel } from "./headset.panel";
 import {
   type ConductorAction,
@@ -25,6 +25,7 @@ import { createLanguagePanel } from "./language.panel";
 import { createM5Panel } from "./m5.panel";
 import { CONDUCTOR_SETTINGS } from "./operator-settings";
 import { createShowTimeline } from "./show-timeline.panel";
+import { createStaticCopy } from "./static-copy.panel";
 import { createStatusStrip } from "./status-strip.panel";
 import { createTechDrawer } from "./technician-drawer.panel";
 import { createTransportPanel } from "./transport.panel";
@@ -53,6 +54,9 @@ export interface ConductorPageOptions {
   readonly initialM5Host: string;
   readonly isM5HostLocked: boolean;
   readonly onM5HostChange: (host: string) => void;
+  /** The language the page itself is read in, independent of narration. */
+  readonly initialOperatorLanguage: OperatorLanguage;
+  readonly onOperatorLanguageChange: (language: OperatorLanguage) => void;
   readonly reloadPage: () => void;
 }
 
@@ -67,17 +71,20 @@ export function mountConductorPage({
   initialM5Host,
   isM5HostLocked,
   onM5HostChange,
+  initialOperatorLanguage,
+  onOperatorLanguageChange,
   reloadPage,
 }: ConductorPageOptions): () => void {
   const lifetime = new AbortController();
   const { signal } = lifetime;
   let observationTimer: ReturnType<typeof setInterval> | undefined;
   let unsubscribeXr: (() => void) | undefined;
+  let copy = CONDUCTOR_COPY[initialOperatorLanguage];
+  document.documentElement.lang = copy.language;
 
   try {
     // Vite resolves imported SVG URLs consistently in development and production.
     for (const [name, url] of Object.entries({
-      "alarm-clock": alarmClockIcon,
       headset: glassesIcon,
       image: imageIcon,
       pause: pauseIcon,
@@ -128,9 +135,17 @@ export function mountConductorPage({
       ),
       run,
       reloadPage,
+      onOperatorLanguageChange: (language) => {
+        if (language === copy.language) return;
+        copy = CONDUCTOR_COPY[language];
+        document.documentElement.lang = language;
+        onOperatorLanguageChange(language);
+        draw();
+      },
       signal,
     });
     const panels: readonly ConductorPanel[] = [
+      createStaticCopy(page),
       statusStrip,
       headset,
       createTransportPanel({ parent: page, run, signal }),
@@ -240,6 +255,7 @@ export function mountConductorPage({
         audioState: run.readAudioState(),
         m5: m5?.readObservation(),
         xr: xrState,
+        copy,
       };
       for (const panel of panels) panel.update(state);
     }

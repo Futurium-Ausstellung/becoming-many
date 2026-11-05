@@ -7,10 +7,12 @@ import type { Run } from "../levels/run-contract";
 import { level as tutorialLevel } from "../levels/start.level";
 /** Resolve browser inputs, start one Run and connect the operator UI. */
 import { mountConductorPage } from "../ui/conductor/conductor.page";
+import { resolveOperatorLanguage } from "../ui/conductor/operator-language";
 import { requireElement } from "../ui/shared/dom";
 import { loadDeploymentConfig } from "./deployment-config";
 
 const M5_HOST_STORAGE_KEY = "bm-conductor-m5-host";
+const OPERATOR_LANGUAGE_STORAGE_KEY = "bm-conductor-language";
 const container = document.querySelector(".conductor");
 if (!(container instanceof HTMLElement))
   throw new Error("Missing conductor root: .conductor");
@@ -76,6 +78,18 @@ try {
       }
       m5?.setHost(host);
     },
+    // Only a chosen language is stored; the browser's own stays a default.
+    initialOperatorLanguage: resolveOperatorLanguage(
+      readStoredOperatorLanguage(),
+      navigator.language,
+    ),
+    onOperatorLanguageChange: (language) => {
+      try {
+        localStorage.setItem(OPERATOR_LANGUAGE_STORAGE_KEY, language);
+      } catch {
+        /* Storage denial only loses the remembered page language. */
+      }
+    },
     reloadPage: () => window.location.reload(),
   });
 } catch (error) {
@@ -122,5 +136,13 @@ function readStoredM5Host(): string {
     return (localStorage.getItem(M5_HOST_STORAGE_KEY) ?? "").trim();
   } catch {
     return "";
+  }
+}
+
+function readStoredOperatorLanguage(): string | null {
+  try {
+    return localStorage.getItem(OPERATOR_LANGUAGE_STORAGE_KEY);
+  } catch {
+    return null;
   }
 }

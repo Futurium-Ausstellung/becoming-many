@@ -10,6 +10,8 @@ status presentation and UI cleanup. It owns no Show clock or visitor policy.
 ## Operator layout
 
 - Top: Sound, Controller and Headset status, the Picture button, and technician tools.
+  The Picture button and wrench are at least 100px tall for a thumb on the
+  station's touch monitor.
 - Main: large Play/Pause and Stop controls, EN/DE below, and the live preview
   alongside them on desktop. Narrow layouts stack controls and preview.
 - Bottom: one continuous timeline with chapter progress and chapter jump buttons.
@@ -22,8 +24,36 @@ uses Lucide's rectangular `smartphone` glyph with a small button. Icons are
 individual SVG assets from the installed package, bound to declared SVG elements.
 
 The existing dark palette and square surfaces are retained. Operator buttons
-have at least 56px touch targets; brighter borders, distinct selected states and
-readable disabled labels provide contrast without a separate styling system.
+have at least 56px touch targets; narration EN/DE and chapter buttons are 84px
+tall. Long German labels wrap inside their buttons. Brighter borders, distinct
+selected states and readable disabled labels provide contrast without a separate
+styling system. Conductor and Flash are set in Rubik from
+`public/fonts/rubik/`, declared in `app.css` as the family `Rubik Operator` so it
+never competes with the end-credits canvas's own `Rubik` face; readouts use
+tabular digits.
+
+The wake screen names the piece small above the station name in large
+uppercase, then a hairline, headline, short hint and a pulsing "Tap to wake"
+pill (static under reduced motion). Without a station name the piece takes the
+large style.
+
+## Operator language
+
+The page is read in English or German, independent of the narration language.
+`conductor-copy.ts` holds both catalogues and the chapter names keyed by cue id
+(unknown ids fall back to `cueDisplayName`). Static words in `conductor.html`
+keep English as the pre-mount default and declare `data-copy`,
+`data-copy-aria-label` or `data-copy-title` keys; `static-copy.panel.ts`
+rewrites them when the copy changes. Panels map decision values (status, picture,
+transport, tutorial playback) through the current copy carried in
+`ConductorViewState`. Raw diagnostic readout values stay untranslated.
+
+Entry resolves the initial language with `resolveOperatorLanguage`: the stored
+choice (`bm-conductor-language`), else the browser language, else English. Only
+an explicit choice in the drawer's Page language group
+(`[data-operator-language]`) is stored. The page sets `<html lang>`. Narration
+EN/DE (`[data-language]`, `L`) and the drawer's Narration readout remain Run's
+language.
 
 ## Entry and Engine boundary
 
@@ -62,7 +92,8 @@ Shift), Home and End jump to the bounds. Its geometry follows Show time directly
 
 Technician tools use a native modal dialog: focus stays inside, Escape closes it
 and focus returns to the opener. Global show shortcuts are inactive while it is
-open. The language panel owns only language controls; the drawer owns speed, resets and diagnostic readouts.
+open. Its M5 group links to `/flash.html` in a new tab, because leaving this
+window would tear down the show it hosts. The language panel owns only language controls; the drawer owns speed, resets and diagnostic readouts.
 
 The wake overlay displays suspended audio; Audio owns its user-activation
 listeners. Picture intent starts enabled. The main Picture button displays actual session state

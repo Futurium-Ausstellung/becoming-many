@@ -12,7 +12,7 @@ files, intermediate exports, and design documents stay outside `public/`.
 | `public/audio/narration/{en,de}/` | Cue-named narration recordings |
 | `public/audio/tutorial/{en,de}/` | Spoken training recordings |
 | `public/audio/granular/` | Approved granular source derivatives and provenance |
-| `public/fonts/rubik/` | Credit font, licence, and provenance |
+| `public/fonts/rubik/` | Credit and operator UI font, licence, and provenance |
 | `public/firmware/m5-controller/` | Merged firmware image and Flash manifest |
 
 Adjacent `provenance.json` files record attribution, source URLs, hashes, and

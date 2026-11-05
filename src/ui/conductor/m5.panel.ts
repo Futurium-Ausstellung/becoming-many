@@ -1,5 +1,5 @@
 import type { M5Observation } from "../../m5/m5-contract";
-import { requireElement, writeText } from "../shared/dom";
+import { requireElement, writeAttribute, writeText } from "../shared/dom";
 import type { ConductorPanel } from "./view-state";
 
 export interface M5PanelOptions {
@@ -21,7 +21,6 @@ export function createM5Panel({
   const host = requireElement(root, "input", HTMLInputElement);
   host.value = initialHost;
   host.readOnly = isHostLocked;
-  host.title = isHostLocked ? "Set by the station's deployment config" : "";
   const preview = bindPreview(root);
   preview.setHost(initialHost);
   const apply = requireElement(root, "[data-set-host]", HTMLButtonElement);
@@ -55,7 +54,9 @@ export function createM5Panel({
 
   return {
     update(state): void {
-      preview.render(state.m5);
+      if (isHostLocked)
+        writeAttribute(host, "title", state.copy.m5.lockedTitle);
+      preview.render(state.m5, state.copy.m5.noSignal);
     },
   };
 }
@@ -64,7 +65,10 @@ interface M5Preview {
   /** An empty host hides the pad; the samples come from the show either way. */
   readonly setHost: (host: string) => void;
   /** Called from the page's redraw; positions the dot from the last sample. */
-  readonly render: (observation: M5Observation | undefined) => void;
+  readonly render: (
+    observation: M5Observation | undefined,
+    noSignal: string,
+  ) => void;
 }
 
 /** Display the accepted device sample; device quality remains diagnostic. */
@@ -82,14 +86,14 @@ function bindPreview(root: HTMLElement): M5Preview {
       element.hidden = host.length === 0;
     },
 
-    render(observation) {
+    render(observation, noSignal) {
       const state = observation?.sample;
       element.dataset.live = String(state !== undefined);
 
       if (state === undefined) {
         dot.setAttribute("cx", "50");
         dot.setAttribute("cy", "50");
-        writeText(readout, "no signal");
+        writeText(readout, noSignal);
         return;
       }
 

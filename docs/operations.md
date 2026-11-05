@@ -39,7 +39,8 @@ The selected button represents the requested language. While its file loads,
 the previous recording continues; a failed replacement leaves that recording
 usable until its natural end. A language change therefore need not be audible
 immediately. Native playback state does not establish intelligibility or headset
-audio quality. UI details belong in the
+audio quality. The page's own operator language (EN/DE in the technician tools)
+is separate from narration and never changes speech. UI details belong in the
 [Conductor documentation](../src/ui/conductor/README.md).
 
 ## Development and local station

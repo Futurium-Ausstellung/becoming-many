@@ -1,12 +1,17 @@
 import type { M5Observation } from "../../m5/m5-contract";
 import type { XrSessionState } from "../../world/xr-contract";
 import { requireElement, writeText } from "../shared/dom";
+import type { StatusValue } from "./conductor-copy";
 import type { ConductorPanel } from "./view-state";
 
 type ReadingState = "idle" | "live" | "warn";
 
 interface Tile {
-  readonly write: (text: string, state: ReadingState) => void;
+  readonly write: (
+    words: Readonly<Record<StatusValue, string>>,
+    value: StatusValue,
+    state: ReadingState,
+  ) => void;
 }
 
 export interface StatusStripOptions {
@@ -24,27 +29,28 @@ export function createStatusStrip({
 
   return {
     update(state): void {
-      sound.write(...soundReading(state.audioState));
-      controller.write(...controllerReading(state.m5));
-      headset.write(...headsetReading(state.xr));
+      const words = state.copy.status;
+      sound.write(words, ...soundReading(state.audioState));
+      controller.write(words, ...controllerReading(state.m5));
+      headset.write(words, ...headsetReading(state.xr));
     },
   };
 }
 
-type ReadingText = readonly [text: string, state: ReadingState];
+type ReadingText = readonly [value: StatusValue, state: ReadingState];
 
 /** Anything but "running" freezes show time; the wake overlay says how. */
 function soundReading(audioState: AudioContextState): ReadingText {
-  return audioState === "running" ? ["OK", "live"] : ["Asleep", "warn"];
+  return audioState === "running" ? ["ok", "live"] : ["asleep", "warn"];
 }
 
 function headsetReading(xr: XrSessionState): ReadingText {
-  if (xr.isSessionActive) return ["Streaming", "live"];
+  if (xr.isSessionActive) return ["streaming", "live"];
 
-  if (xr.availability === "unknown") return ["Checking", "idle"];
+  if (xr.availability === "unknown") return ["checking", "idle"];
   return xr.availability === "available"
-    ? ["Ready", "idle"]
-    : ["VR unavailable", "warn"];
+    ? ["ready", "idle"]
+    : ["unavailable", "warn"];
 }
 
 /**
@@ -53,18 +59,18 @@ function headsetReading(xr: XrSessionState): ReadingText {
  * live reply supplies steering; metadata stays in the technician drawer.
  */
 function controllerReading(status: M5Observation | undefined): ReadingText {
-  if (status === undefined || status.status === "off") return ["—", "idle"];
-  if (status.status === "connecting") return ["Connecting", "warn"];
+  if (status === undefined || status.status === "off") return ["none", "idle"];
+  if (status.status === "connecting") return ["connecting", "warn"];
 
-  return ["OK", "live"];
+  return ["ok", "live"];
 }
 
 function bindTile(root: HTMLElement, name: string): Tile {
   const tile = requireElement(root, `[data-tile="${name}"]`, HTMLElement);
   const output = requireElement(tile, "output", HTMLOutputElement);
   return {
-    write(text, state): void {
-      writeText(output, text);
+    write(words, value, state): void {
+      writeText(output, words[value]);
       if (tile.dataset.state !== state) tile.dataset.state = state;
     },
   };

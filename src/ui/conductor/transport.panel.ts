@@ -56,7 +56,9 @@ export function createTransportPanel({
       pauseIcon.hidden = !canPause;
       writeText(
         transportLabel,
-        state.playback === "error" ? "Retry" : canPause ? "Pause" : "Play",
+        state.copy.transport[
+          state.playback === "error" ? "retry" : canPause ? "pause" : "play"
+        ],
       );
     },
   };

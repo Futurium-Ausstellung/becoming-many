@@ -3,6 +3,7 @@ import type { ShowLevelName } from "../../dramaturgy/narration-schedule";
 import type { RunPlayback } from "../../levels/run-contract";
 import type { M5Observation } from "../../m5/m5-contract";
 import type { XrSessionState } from "../../world/xr-contract";
+import type { ConductorCopy } from "./conductor-copy";
 
 /** UI observations; display time follows the pointer during a scrub gesture. */
 export interface ConductorViewState {
@@ -18,6 +19,8 @@ export interface ConductorViewState {
   readonly m5: M5Observation | undefined;
   /** The headset session, so every panel reads the same instant of it. */
   readonly xr: XrSessionState;
+  /** The operator language's words; panels rewrite labels when it changes. */
+  readonly copy: ConductorCopy;
 }
 
 /** A UI region with local gesture/display state and no experience policy. */
