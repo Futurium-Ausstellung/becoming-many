@@ -31,19 +31,6 @@ copy, and the station's operator copy in `src/ui/conductor/conductor-copy.ts`.
 Everything around those catalogues, including their identifiers, comments and
 selection code, stays English.
 
-## Branch Protection
-
-- Work exclusively on the `david_refactor` branch. Before any file change,
-  commit, pull, rebase, merge, or push, verify that `git branch --show-current`
-  returns `david_refactor`; stop immediately if it does not.
-- Never check out, modify, merge into, rebase, commit to, or push to `main`. All work,
-  commits, pulls, rebases, and pushes for this refactor target
-  `origin/david_refactor` only.
-- Do not create or use additional feature branches. Preserve existing local changes.
-- The user authorizes ongoing commits and pushes of completed, targeted-tested
-  issues or coherent blocks to `origin/david_refactor`. Verify push success;
-  never force-push. Follow the existing workflow, without repeated permission requests.
-
 ## Required Reading
 
 Read the current-work pointer and the relevant Architecture and Development
