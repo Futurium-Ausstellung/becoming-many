@@ -9,9 +9,9 @@ status presentation and UI cleanup. It owns no Show clock or visitor policy.
 
 ## Operator layout
 
-- Top: Sound, Controller and Headset status, the Picture button, and technician tools.
-  The Picture button and wrench are at least 100px tall for a thumb on the
-  station's touch monitor.
+- Top: Sound, Controller and Headset status, the Picture button, the reload
+  reminder, and technician tools. The Picture button, reload reminder and wrench
+  are at least 100px tall for a thumb on the station's touch monitor.
 - Main: large Play/Pause and Stop controls, EN/DE below, and the live preview
   alongside them on desktop. Narrow layouts stack controls and preview.
 - Bottom: one continuous timeline with chapter progress and chapter jump buttons.
@@ -36,6 +36,15 @@ The wake screen names the piece small above the station name in large
 uppercase, then a hairline, headline, short hint and a pulsing "Tap to wake"
 pill (static under reduced motion). Without a station name the piece takes the
 large style.
+
+## Reload reminder
+
+Long-running pages slowly lose performance. The masthead counts down
+`reloadReminderMilliseconds` (one hour) from page start. While it counts, the
+button is disabled and muted. Once it reaches zero it turns amber, reads
+"Reload recommended · Tap to reload", and one tap reloads the whole page through
+Entry's `reloadPage`. It never reloads on its own: the operator picks a moment
+between visitors. The reload starts a fresh document, so the countdown restarts.
 
 ## Operator language
 
