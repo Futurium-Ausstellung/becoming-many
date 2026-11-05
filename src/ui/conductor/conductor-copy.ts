@@ -99,6 +99,15 @@ export interface ConductorCopy {
     readonly closing: string;
     readonly transition: string;
   };
+  readonly reloadReminder: {
+    /** Above the countdown while a reload is not yet recommended. */
+    readonly pending: string;
+    readonly pendingTitle: string;
+    /** Above the action once a reload is recommended. */
+    readonly due: string;
+    readonly dueTitle: string;
+    readonly action: string;
+  };
   readonly drawer: {
     readonly reload: string;
     readonly reloadArmed: string;
@@ -228,6 +237,13 @@ const ENGLISH: ConductorCopy = {
     closing: "Closing",
     transition: "Transition",
   },
+  reloadReminder: {
+    pending: "Reload in",
+    pendingTitle: "A page reload will be recommended when this reaches zero",
+    due: "Reload recommended",
+    dueTitle: "Reload the page now to restore performance",
+    action: "Tap to reload",
+  },
   drawer: {
     reload: "Reload page",
     reloadArmed: "Tap again to reload",
@@ -323,6 +339,13 @@ const GERMAN: ConductorCopy = {
     },
     closing: "Abschluss",
     transition: "Übergang",
+  },
+  reloadReminder: {
+    pending: "Neu laden in",
+    pendingTitle: "Bei null wird empfohlen, die Seite neu zu laden",
+    due: "Neu laden empfohlen",
+    dueTitle: "Seite jetzt neu laden, um die Leistung wiederherzustellen",
+    action: "Tippen: neu laden",
   },
   drawer: {
     reload: "Seite neu laden",

@@ -4,6 +4,7 @@ import glassesIcon from "lucide-static/icons/glasses.svg?no-inline";
 import imageIcon from "lucide-static/icons/image.svg?no-inline";
 import pauseIcon from "lucide-static/icons/pause.svg?no-inline";
 import playIcon from "lucide-static/icons/play.svg?no-inline";
+import rotateCwIcon from "lucide-static/icons/rotate-cw.svg?no-inline";
 import smartphoneIcon from "lucide-static/icons/smartphone.svg?no-inline";
 import squareIcon from "lucide-static/icons/square.svg?no-inline";
 import volume2Icon from "lucide-static/icons/volume-2.svg?no-inline";
@@ -24,6 +25,7 @@ import {
 import { createLanguagePanel } from "./language.panel";
 import { createM5Panel } from "./m5.panel";
 import { CONDUCTOR_SETTINGS } from "./operator-settings";
+import { createReloadReminder } from "./reload-reminder.panel";
 import { createShowTimeline } from "./show-timeline.panel";
 import { createStaticCopy } from "./static-copy.panel";
 import { createStatusStrip } from "./status-strip.panel";
@@ -89,6 +91,7 @@ export function mountConductorPage({
       image: imageIcon,
       pause: pauseIcon,
       play: playIcon,
+      "rotate-cw": rotateCwIcon,
       smartphone: smartphoneIcon,
       square: squareIcon,
       "volume-2": volume2Icon,
@@ -114,7 +117,7 @@ export function mountConductorPage({
         if (
           event.target instanceof Element &&
           event.target.closest(
-            ".conductor__drawer, .conductor__tech-button, .conductor__stream-button",
+            ".conductor__drawer, .conductor__tech-button, .conductor__stream-button, .conductor__reload-reminder",
           )
         )
           return;
@@ -148,6 +151,7 @@ export function mountConductorPage({
       createStaticCopy(page),
       statusStrip,
       headset,
+      createReloadReminder({ parent: masthead, reloadPage, signal }),
       createTransportPanel({ parent: page, run, signal }),
       createShowTimeline({
         parent: page,

@@ -229,6 +229,30 @@ button[data-armed="true"],
   min-width: 124px;
   min-height: 100px;
 }
+/* Counts down quietly, then asks for one tap once a reload is recommended. */
+.conductor__reload-reminder {
+  align-self: stretch;
+  flex-wrap: nowrap;
+  gap: 16px;
+  min-height: 100px;
+  padding: 10px 20px;
+  text-align: left;
+  border-left: 4px solid currentColor;
+}
+.conductor__reload-reminder:disabled {
+  color: var(--muted);
+  background: var(--panel);
+}
+.conductor__reload-reminder:disabled .conductor__tile-value {
+  color: var(--ink);
+}
+.conductor__reload-reminder[data-due="true"] {
+  color: var(--ground);
+  background: var(--warn);
+}
+.conductor__reload-reminder[data-due="true"] .conductor__tile-label {
+  color: inherit;
+}
 .conductor__tile-body {
   min-width: 0;
   gap: 0;
@@ -553,6 +577,16 @@ body:has(> .app) {
   }
   .conductor__tiles {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* Too narrow to share the row with the tiles; take a full row below them. */
+  .conductor__masthead {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .conductor__reload-reminder {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    min-height: 72px;
   }
 }
 @media (width < 540px) {

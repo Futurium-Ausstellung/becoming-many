@@ -18,4 +18,8 @@ export const CONDUCTOR_SETTINGS = {
   // first press. Long enough to confirm deliberately, short enough that a
   // stray click expires on its own.
   confirmMilliseconds: 3_000,
+
+  // After this long the masthead recommends a full page reload. Long-running
+  // pages slowly lose performance; the operator reloads between visitors.
+  reloadReminderMilliseconds: 60 * 60 * 1_000,
 } as const;
