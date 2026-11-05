@@ -100,7 +100,7 @@ a fresh Run for each cue. This procedure does not establish a new full-show resu
 Transitions use a fresh context per scheduled cue and compare first/repeated
 sought crossings (two seconds before, ten seconds of real playback). They do
 not reproduce the entire natural workload leading into that cue. Full mode
-plays the actual 521-second schedule without seeking after its initial reset.
+plays the actual 525-second schedule without seeking after its initial reset.
 These runs keep production streaming, the audio clock, and ordinary browser
 VSync. They do not enable deterministic replay, tracing, video, or DevTools.
 

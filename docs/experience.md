@@ -17,10 +17,12 @@ than loading a new scene at every cue.
 | 3:50 | Thermal | False-colour heat relationships |
 | 4:39 | Magnetic | Directional sky perception |
 | 5:35 | Connections | Layered network synthesis |
-| 7:26 | White World | Return |
-| 8:36 | White World | End credits |
+| 7:26 | White World | Return: layers removed; closing words at 7:30 |
+| 8:40 | White World | End credits |
 
-The authored main show lasts 8:41. `src/dramaturgy/piece-schedule.ts` owns exact
+The authored main show lasts 8:45. The return is the one cue whose world leads
+its narration: the strip-back starts at 7:26 and the closing words follow at
+7:30, into finished white. `src/dramaturgy/piece-schedule.ts` owns exact
 timing. `script/en.md` and `script/de.md` own narration wording.
 
 Senses accumulate rather than replace one another. White World supplies

@@ -113,3 +113,24 @@ describe("organVoiceStrengthAt", () => {
     expect([...heard].sort()).toEqual([...ORGAN_VOICES].sort());
   });
 });
+
+describe("a cue whose world leads its recording", () => {
+  test("turns the organ where the world turns, not where the voice starts", () => {
+    const led: NarrationSchedule = {
+      ...SCHEDULE,
+      narration: SCHEDULE.narration.map((cue) =>
+        cue.cueId === "return"
+          ? { ...cue, worldLeadSeconds: SENSE_FADE_SECONDS }
+          : cue,
+      ),
+    };
+    const at = (voice: OrganVoiceName, seconds: number) =>
+      organVoiceStrengthAt(led, ORGAN_SCORE, voice, seconds);
+
+    // The closing words at 150 are spoken over the wind alone.
+    expect(at("choir", 150 - SENSE_FADE_SECONDS)).toBe(1);
+    expect(at("choir", 150 - SENSE_FADE_SECONDS / 2)).toBeCloseTo(0.5, 6);
+    expect(at("choir", 150)).toBe(0);
+    expect(at("wind", 150)).toBe(1);
+  });
+});
