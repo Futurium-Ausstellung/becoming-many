@@ -5,7 +5,7 @@ files, intermediate exports, and design documents stay outside `public/`.
 
 | Directory | Contents |
 | --- | --- |
-| `public/models/animals/` | Ground animals, bat, and bird GLBs |
+| `public/models/animals/` | Ground animals, passage bat and bird, and flock-bird GLBs |
 | `public/models/vegetation/` | Tree and bush GLBs |
 | `public/models/rocks/` | Rock GLBs and selectable packs |
 | `public/routes/animal-passages/` | Authored passage tracks |
@@ -44,7 +44,9 @@ Material names are case-sensitive visual roles:
 
 Level-controlled materials ignore embedded base-colour textures where necessary
 to preserve authored colour. Bat and bird belong to Animal Passages and retain
-their authored material treatment.
+their authored material treatment. `flock-bird.glb` is a static, single-mesh
+bake of the same source bird for the Motion Sense flock bodies; its colour is
+authored by the level.
 
 ## Runtime rules
 

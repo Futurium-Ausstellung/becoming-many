@@ -190,6 +190,13 @@ export const level: LevelPreset = {
         trailSizeMeters: 0.18,
         trailOpacity: 1,
       },
+      // A blackbird's length, and the fur color the walking animals carry: the
+      // flocks circle beyond the heat view's reach, so a bird reads in the echo
+      // palette like an unwarmed animal rather than as a warm body up close.
+      body: {
+        lengthMeters: 0.26,
+        color: 0x171717,
+      },
     },
   },
   animals: {

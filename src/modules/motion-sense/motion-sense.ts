@@ -6,13 +6,17 @@
  */
 
 import type { Scene } from "three";
+import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
+import type { UnlitMaterialEffect } from "../../utils/asset-loader/material-effect";
 import { isNormalized } from "../../utils/number-ranges";
 import type { WorldModule } from "../../world/module-runtime";
 import type { Viewpoint } from "../../world/viewpoint";
 import type { WorldSurface } from "../../world-surface/world-surface";
+import { type BirdBodies, createBirdBodies } from "./bird-bodies";
 import {
   type BirdFlocks,
   createBirdFlocks,
+  getBirdCount,
   getBirdPointCount,
 } from "./bird-flocks";
 import { createFlySwarms, type FlySwarms } from "./fly-swarms";
@@ -41,6 +45,15 @@ export interface MotionSenseModuleOptions {
   readonly parameters: MotionSenseParameters;
   readonly groundYAt: WorldSurface["groundYAt"];
   readonly zoneAt: WorldSurface["zoneAt"];
+  /**
+   * The bird model, and what the show fades it through. Absent for a level
+   * that authors no bird bodies: the trace is the sense, and a body only ever
+   * joins it. The model is borrowed; Run owns and releases the loaded asset.
+   */
+  readonly birdBody?: {
+    readonly asset: GLTF;
+    readonly effects: readonly UnlitMaterialEffect[];
+  };
 }
 
 /** One actor's position stream paired with the ring it prints into. */
@@ -52,11 +65,15 @@ interface MotionTrailPrinter {
 interface MotionSenseResources {
   readonly flySwarms: FlySwarms;
   readonly birdFlocks: BirdFlocks | undefined;
+  birdBodies: BirdBodies | undefined;
   readonly printers: readonly MotionTrailPrinter[];
 }
 
 interface MotionSenseState {
   currentResources: MotionSenseResources | undefined;
+  /** Both must hold for a body to be drawn: the module up, and heat seen. */
+  isActive: boolean;
+  hasBodyPresence: boolean;
 }
 
 /** The moving actor groups this module simulates. */
@@ -75,6 +92,13 @@ export interface MotionSenseModuleHandle {
    * caller places sound on what exists and stays silent about the rest.
    */
   readonly readActorCenters: (group: MotionActorGroup) => Float32Array;
+
+  /**
+   * How present the bird bodies are, 0..1. The flight never changes: this
+   * only decides whether the bodies flying it can be seen, which is the heat
+   * view's business rather than the motion sense's.
+   */
+  readonly setBodyPresence: (presence: number) => void;
 }
 
 /** Answer for a group with nothing in the world; shared, never written. */
@@ -87,7 +111,11 @@ export function createMotionSenseModule(
     throw new RangeError("Motion intensity must be between zero and one");
   }
   const senseFadeUniform = { value: 1 };
-  const state: MotionSenseState = { currentResources: undefined };
+  const state: MotionSenseState = {
+    currentResources: undefined,
+    isActive: false,
+    hasBodyPresence: true,
+  };
 
   return {
     module: {
@@ -101,6 +129,10 @@ export function createMotionSenseModule(
       senseFadeUniform.value = intensity;
     },
     readActorCenters: (group) => readActorCenters(state, group),
+    setBodyPresence: (presence) => {
+      state.hasBodyPresence = presence > 0;
+      applyBirdBodyVisibility(state);
+    },
   };
 }
 
@@ -122,8 +154,6 @@ function loadMotionSense(
   senseFadeUniform: { readonly value: number },
 ): void {
   const { viewpoint, scene, parameters } = options;
-  // Bird bodies stay invisible (perception-only actors): only their trail
-  // ring joins the scene beside the visible fly specks.
   const birdFlocks = parameters.birds
     ? createBirdFlocks({
         birds: parameters.birds,
@@ -141,7 +171,13 @@ function loadMotionSense(
     senseFadeUniform,
   });
   const printers: MotionTrailPrinter[] = [];
-  state.currentResources = { flySwarms, birdFlocks, printers };
+  const resources: MotionSenseResources = {
+    flySwarms,
+    birdFlocks,
+    birdBodies: undefined,
+    printers,
+  };
+  state.currentResources = resources;
   printers.push({
     source: flySwarms,
     trail: createMotionTrailBuffer({
@@ -169,6 +205,18 @@ function loadMotionSense(
         intensity: parameters.intensity,
         senseFadeUniform,
       }),
+    });
+  }
+
+  // A flock is a trace first: the bodies join only where a level authors
+  // them, and even then a show decides when they may be seen.
+  if (birdFlocks && parameters.birds?.body && options.birdBody) {
+    resources.birdBodies = createBirdBodies({
+      scene,
+      asset: options.birdBody.asset,
+      appearance: parameters.birds.body,
+      birdCount: getBirdCount(parameters.birds),
+      effects: options.birdBody.effects,
     });
   }
 
@@ -202,6 +250,11 @@ function updateMotionSense(
     viewpoint.worldPosition.x,
     viewpoint.worldPosition.z,
   );
+  // Placed from the same stream that prints the trace, so a body is always
+  // exactly where the trace says a bird is.
+  if (resources.birdFlocks && resources.birdBodies) {
+    resources.birdBodies.update(resources.birdFlocks.getBodyStream());
+  }
   for (const printer of resources.printers) {
     printer.trail.spawnFromWorldPoints(printer.source.getWorldPositions());
   }
@@ -218,6 +271,15 @@ function setMotionSenseVisible(
   for (const printer of resources.printers) {
     printer.trail.points.visible = visible;
   }
+  state.isActive = visible;
+  applyBirdBodyVisibility(state);
+}
+
+/** A body is drawn only while the sense stands and something reveals it. */
+function applyBirdBodyVisibility(state: MotionSenseState): void {
+  state.currentResources?.birdBodies?.setVisible(
+    state.isActive && state.hasBodyPresence,
+  );
 }
 
 function unloadMotionSense(state: MotionSenseState, scene: Scene): void {
@@ -225,6 +287,7 @@ function unloadMotionSense(state: MotionSenseState, scene: Scene): void {
   if (!resources) return;
 
   state.currentResources = undefined;
+  resources.birdBodies?.dispose();
   scene.remove(resources.flySwarms.points);
   resources.flySwarms.dispose();
   for (const printer of resources.printers) {

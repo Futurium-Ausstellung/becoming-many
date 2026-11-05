@@ -41,7 +41,11 @@ import { createEndCreditsPanel } from "../modules/end-credits/end-credits-panel"
 import { createGrassClipmapModule } from "../modules/grass-clipmap/grass-clipmap";
 import { getGrassZoneCoverage } from "../modules/grass-clipmap/grass-height-field";
 import { createMagneticSense } from "../modules/magnetic-sense/magnetic-sense";
-import { createMotionSenseModule } from "../modules/motion-sense/motion-sense";
+import { BIRD_BODY_ASSET } from "../modules/motion-sense/bird-bodies";
+import {
+  createMotionSenseModule,
+  type MotionSenseModuleOptions,
+} from "../modules/motion-sense/motion-sense";
 import { createPassageSwarmModule } from "../modules/motion-sense/passage-swarm";
 import {
   type ConnectionsModuleHandle,
@@ -125,6 +129,8 @@ export interface LoadedLevelAssets {
   readonly vegetation: GltfAssets;
   readonly rocks: GltfAssets;
   readonly animals: GltfAssets;
+  /** The flock bird model; loaded only for a level that draws bird bodies. */
+  readonly birds: GltfAssets;
   /** Passage models and routes; only a show crosses animals, so only a show loads them. */
   readonly passages: PassageResources | undefined;
 }
@@ -259,6 +265,7 @@ export async function composeLevel({
             parameters: level.motion,
             groundYAt: worldSurface.groundYAt,
             zoneAt: worldSurface.zoneAt,
+            birdBody: readBirdBody(animalsFade),
           })
         : undefined;
     if (motion) createdModules.add(motion.module);
@@ -305,7 +312,12 @@ export async function composeLevel({
         senses: {
           scent: scent?.setIntensity,
           motion: motion?.setIntensity,
-          thermal: thermal?.setIntensity,
+          // Heat is what reveals a warm body, so the flock bodies follow the
+          // thermal strength while the flight itself stays the motion sense's.
+          thermal: composeSenseDrivers(
+            thermal?.setIntensity,
+            motion?.setBodyPresence,
+          ),
           magnetic: magnetic?.setIntensity,
           connections: connections?.setIntensity,
         },
@@ -385,6 +397,17 @@ export async function composeLevel({
       staticSources,
       groundCoverAt,
     });
+  }
+
+  /** The flock bird model and the fade it follows, for a level that draws it. */
+  function readBirdBody(
+    animalsFade: UnlitMaterialEffect | undefined,
+  ): MotionSenseModuleOptions["birdBody"] {
+    if (!hasBirdBodies(level)) return undefined;
+
+    const asset = assets.birds.get(BIRD_BODY_ASSET.id);
+    if (!asset) throw new Error("The flock bird model was not loaded");
+    return { asset, effects: animalsFade ? [animalsFade] : [] };
   }
 
   /**
@@ -706,6 +729,29 @@ function buildSurfaceEffects(
   return effects.length > 0 ? effects : undefined;
 }
 
+/** Drive several receivers of one sense strength from its single driver. */
+function composeSenseDrivers(
+  ...drivers: readonly (((intensity: number) => void) | undefined)[]
+): ((intensity: number) => void) | undefined {
+  const configured = drivers.filter(
+    (driver): driver is (intensity: number) => void => driver !== undefined,
+  );
+  if (configured.length <= 1) return configured[0];
+
+  return (intensity) => {
+    for (const drive of configured) drive(intensity);
+  };
+}
+
+/**
+ * Whether this level draws bird bodies at all. One answer for both the load
+ * and the construction, so a model is never loaded that nothing draws.
+ */
+function hasBirdBodies(level: WorldComposition): boolean {
+  const motion = level.motion;
+  return Boolean(motion && motion.intensity !== 0 && motion.birds?.body);
+}
+
 /** Report one reused body array to every sense that asked for it. */
 function composeBodyObservers(
   ...observers: readonly (AnimalBodiesObserver | undefined)[]
@@ -735,30 +781,35 @@ export async function loadLevelAssets(
   passageSchedule: PassageSchedule | undefined,
   signal?: AbortSignal,
 ): Promise<LoadedLevelAssets> {
-  const [vegetation, rocks, animals, passages] = await Promise.allSettled([
-    loadGltfAssets(
-      level.vegetation ? VEGETATION_DEFINITION.assets : [],
-      signal,
-    ),
-    loadGltfAssets(level.rocks ? ROCKS_DEFINITION.assets : [], signal),
-    loadGltfAssets(level.animals ? ANIMALS_DEFINITION.species : [], signal),
-    passageSchedule ? loadPassageResources(passageSchedule, signal) : undefined,
-  ]);
+  const [vegetation, rocks, animals, birds, passages] =
+    await Promise.allSettled([
+      loadGltfAssets(
+        level.vegetation ? VEGETATION_DEFINITION.assets : [],
+        signal,
+      ),
+      loadGltfAssets(level.rocks ? ROCKS_DEFINITION.assets : [], signal),
+      loadGltfAssets(level.animals ? ANIMALS_DEFINITION.species : [], signal),
+      loadGltfAssets(hasBirdBodies(level) ? [BIRD_BODY_ASSET] : [], signal),
+      passageSchedule
+        ? loadPassageResources(passageSchedule, signal)
+        : undefined,
+    ]);
 
   if (
     vegetation.status === "rejected" ||
     rocks.status === "rejected" ||
     animals.status === "rejected" ||
+    birds.status === "rejected" ||
     passages.status === "rejected" ||
     signal?.aborted
   ) {
     const errors: unknown[] = [
-      ...[vegetation, rocks, animals, passages].flatMap((result) =>
+      ...[vegetation, rocks, animals, birds, passages].flatMap((result) =>
         result.status === "rejected" ? [result.reason] : [],
       ),
       ...(signal?.aborted ? [signal.reason] : []),
     ];
-    const sources = [vegetation, rocks, animals].flatMap((result) =>
+    const sources = [vegetation, rocks, animals, birds].flatMap((result) =>
       result.status === "fulfilled" ? [result.value] : [],
     );
     if (passages.status === "fulfilled" && passages.value)
@@ -778,6 +829,7 @@ export async function loadLevelAssets(
     vegetation: vegetation.value,
     rocks: rocks.value,
     animals: animals.value,
+    birds: birds.value,
     passages: passages.value,
   };
 }

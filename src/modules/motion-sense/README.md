@@ -8,8 +8,11 @@ Boundary: Level values live in presets; composition lives in the Level Runtime.
 # Motion Sense
 
 Motion Sense is the level-04 content module: persistent ambient fly swarms
-and invisible circling bird flocks whose movement prints fading motion-trail
-ring buffers — movement literally leaves a visible trace. It is a port of
+and circling bird flocks whose movement prints fading motion-trail ring
+buffers — movement literally leaves a visible trace. The flocks fly as pure
+trace here, because movement without a body is what level 04 is about; from
+level 05 on a level may also author bodies for them, and a show only lets
+those be seen once the heat view opens. It is a port of
 the proven bm-base motion layer (`mosquito-flocks` plus the
 `ParticleTrailBuffer`), rewritten from WebGPU/TSL to this repository's
 WebGL2 idiom: `THREE.Points`, `PointsMaterial`, `onBeforeCompile` patches,
@@ -24,16 +27,23 @@ and raw GLSL ES 3.00 files.
   on player-centred distance rings, stepped-noise buzz, strided flockmate
   sampling, lobe cohesion, a hard clamp above the anchor's fitted ground
   plane, epoch-based re-anchoring, and the opaque fly point pool.
+- `bird-bodies.ts` owns the optional pool of bodies flying the flocks: one
+  `InstancedMesh` for all sixty birds, the model measured onto the authored
+  length, and the signed wing span every vertex carries. A skeleton each is
+  not affordable, so `bird-wing-beat.vert.glsl` swings the wings about the
+  flight axis from one value per instance. It reads the flock's body stream
+  and decides nothing about the flight. The loaded model is borrowed: Run
+  owns and releases it, the pool releases only its own clone.
 - `swarm-shape.ts` owns the volume a swarm buzzes inside: the per-swarm
   anisotropic axes and yaw, the drifting density lobes flies clump around,
   the Gaussian seeding, the per-fly binding, and the envelope spring whose
   outer hold relaxes rather than stiffens. It is what keeps the clouds
   irregular, unequal, dense in the middle, and free of any boundary but the
   ground.
-- `bird-flocks.ts` owns the perception-only bird flocks: deterministic
-  orbits on air rings that drift after the traveler, three points per bird
-  (body plus two wingtips on a hashed flap oscillation), and no scene
-  object at all — only the position stream.
+- `bird-flocks.ts` owns the bird flocks: deterministic orbits on air rings
+  that drift after the traveler, three points per bird (body plus two
+  wingtips on a hashed flap oscillation), a body stream (position, heading
+  along the bird's actual travel, flap), and no scene object at all.
 - `motion-random.ts` keeps the shared stateless hash streams both actors
   derive their placement and character from.
 - `motion-trail-buffer.ts` owns the ring of `pointCount × lifetimeFrames`
@@ -71,8 +81,8 @@ Every actor prints trails through the same seam: a trail ring consumes
 nothing but a packed world-position stream, so the module pairs each source
 with its own ring and appearance. Flies and birds implement it today;
 further moving actors join without a bus, a sibling import, or any change
-to the existing paths. Any upgrade from point birds to rigged wing-vertex
-sampling requires a current issue with visual and performance acceptance.
+to the existing paths. Bird bodies print no trail of their own: they stand
+on the stream the trace is printed from.
 
 ## Where the clouds are
 
@@ -102,3 +112,8 @@ array for a group this level does not carry, and while it is unloaded.
   it can ride neither this module's gate nor its fade. It reads where that
   cloud stands through `src/modules/passage-crossing.ts`, the same kind of
   neutral seam as `connection-nodes.ts`, so neither module imports the other.
+- Bird bodies carry the authored echo tone rather than the heat view's false
+  colour. The flocks circle 30 to 90 metres out, well beyond the heat view's
+  35 m reach, so they read like an unwarmed animal; a bird that came closer
+  would stay dark where a walking animal would glow. Per-instance warmth is
+  the exact fix and needs the thermal contract to accept an instance matrix.

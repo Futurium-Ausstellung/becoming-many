@@ -541,6 +541,7 @@ function assetReleases(assets: LoadedLevelAssets | undefined): (() => void)[] {
     assets?.vegetation,
     assets?.rocks,
     assets?.animals,
+    assets?.birds,
     assets?.passages?.models,
   ].map((batch) => () => {
     if (batch) disposeGltfAssets(batch);

@@ -292,6 +292,15 @@ test("Thermal Level owns its complete heat-world startup recipe", () => {
   expect(thermalMotion.birds.appearance.trailColor).not.toBe(
     motionLevel.motion?.birds?.appearance.trailColor,
   );
+  // Movement without a body is what Motion Perception is about: the flocks
+  // fly it as pure trace and only the heat view reveals what flies them.
+  expect(motionLevel.motion?.birds?.body).toBeUndefined();
+  for (const heatLevel of [thermalPreset, magneticLevel, connectionsLevel]) {
+    expect(heatLevel.motion?.birds?.body).toEqual({
+      lengthMeters: 0.26,
+      color: 0x171717,
+    });
+  }
 
   expect(thermal.intensity).toBe(1);
   expect(Object.values(thermal.colors)).toEqual(thermalPalette);
