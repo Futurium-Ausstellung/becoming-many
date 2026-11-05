@@ -50,6 +50,11 @@ see [browser verification](../tests/browser/README.md#live-language-regression)
 for targeted cases, output paths and limits. Use this affected-interaction
 check alongside focused Sound/Start tests, rather than replaying a full Show.
 
+Pull requests and pushes to `main` run the same gates in GitHub Actions:
+`bun run lint`, `bun run check`, `bun test`, `bunx vite build`, an image build
+when station inputs change, and an advisory `fallow audit` against the base.
+Browser suites stay local.
+
 Run broad suites, full shows, and extended browser checks only when the changed
 boundary or issue acceptance requires them. Never weaken a test, suppress a
 finding, or update a benchmark reference merely to obtain a pass.
