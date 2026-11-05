@@ -59,6 +59,8 @@ test("Run restarts tutorial across phases and owns pending restart cleanup", asy
           worlds.push(world);
           return world;
         },
+        composeVeil: () => ({ setPresence() {}, module: { load() {}, activate() {},
+          deactivate() {}, unload() {} } }),
         composeControls: () => ({ resetRig(){resetCount++;},
           flight:{update(){}}, constrainHeight(limits){heightRequests.push(limits);} }),
         composeLevel: async ({level, language}) => {

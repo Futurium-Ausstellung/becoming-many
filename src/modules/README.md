@@ -26,6 +26,7 @@ dispose everything they create.
 - Mycelium/Connections owns fixed network draws and a module-specific topology
   worker.
 - End Credits shows the closing panel that ends a show.
+- White Veil covers the whole view in white before Play and after Stop.
 - Echo Depth, Thermal Perception, and World Fade are composable material
   effects; Zone Visualizer is a diagnostic Terrain presentation.
 

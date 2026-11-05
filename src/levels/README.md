@@ -108,7 +108,9 @@ derivatives. UI releases only its own presentation resources. The existing
 No entry currently requests a tutorial. The audience routes `/`, `/start`,
 `/tutorial` and `/?level=start` open the main Show directly with the rig at its
 arrival pose, and audience entry starts automatically. Conductor opens at the
-same pose and waits for Play. The rest of this section describes a Show request
+same pose and waits for Play. Each Show opens behind the White Veil: the world
+fades in from white over `HANDOFF_SETTINGS.veilLiftSeconds` once playback runs,
+Pause holds the fade, and Stop cuts straight back to white. The rest of this section describes a Show request
 that names a `tutorial`, which Run still supports.
 
 `LevelRun` runs that preset first, waits for the complete closing narration and

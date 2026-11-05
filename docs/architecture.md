@@ -146,7 +146,9 @@ visuals and audio, retires its resources and selects a main Show position.
 
 Neither the audience nor the Conductor entry currently requests a tutorial: both
 open the main Show from the arrival pose, audience entry playing and Conductor
-waiting for Play. The tutorial behavior below applies to a Show request naming one.
+waiting for Play. Every Show opens behind Run's white veil; the world fades in
+from white once playback runs, and Stop cuts straight back to white. The tutorial
+behavior below applies to a Show request naming one.
 
 Run prepares the main composition and then deactivates it
 while Start is active. Both borrow the same spatial-audio owner. Run fades Start,
