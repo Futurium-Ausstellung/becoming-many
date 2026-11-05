@@ -8,7 +8,7 @@ export const level: LevelPreset = {
   backgroundColor: 0xffffff,
   viewDistance: 128,
   desktopFieldOfViewDegrees: 80,
-  maximumGroundClearanceMeters: 50,
+  maximumGroundClearanceMeters: 40,
 
   // 2. Flight preview
   flightGuidance: {
