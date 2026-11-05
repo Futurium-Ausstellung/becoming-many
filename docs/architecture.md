@@ -144,13 +144,16 @@ course exit (or deadline), completed closing voice and white-room presentation.
 The operator may explicitly skip training through Run; that command fades its
 visuals and audio, retires its resources and selects a main Show position.
 
-For the audience route, Run prepares the main composition and then deactivates it
+Neither the audience nor the Conductor entry currently requests a tutorial: both
+open the main Show from the arrival pose, audience entry playing and Conductor
+waiting for Play. The tutorial behavior below applies to a Show request naming one.
+
+Run prepares the main composition and then deactivates it
 while Start is active. Both borrow the same spatial-audio owner. Run fades Start,
 releases its sources, resets the existing flight rig to a terrain-relative arrival,
 reactivates the main composition and starts Show. The renderer, XR session and
 controls survive this transition. Show transport becomes available only afterward.
-Conductor prepares the same optional tutorial and waits for Play. Audience entry
-retains automatic playback. Run exposes playback across tutorial and main Show;
+Run exposes playback across tutorial and main Show;
 Pause holds tutorial lesson time, speech and flight without removing resources.
 Stop and the Tutorial chapter restart training through Run, including during a
 handoff. Run rewinds and holds main Show, releases the previous tutorial, and

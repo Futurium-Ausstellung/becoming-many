@@ -70,7 +70,7 @@ language.
 applies its initial M5 host, mounts the page and connects page exit to cleanup.
 `conductor.page.ts` mounts panels against narrow Show/Run/M5/XR capabilities.
 Show owns main playback/language; Run owns experience transport and the current
-`resetShowAndFlight` operation (rewind, reset flight, prepare a paused tutorial). That operation does
+`resetShowAndFlight` operation (rewind, return flight to its opening pose, hold until Play). That operation does
 not replace the Run. Browser reload and stored preferences belong to Entry.
 
 ## Public interface and retained interaction
@@ -83,14 +83,13 @@ Drag preview, seek throttling, `wasPlaying`, keyboard mapping and
 confirmation timers are legitimate UI behavior. Schedule arithmetic remains
 in `dramaturgy`; device validity remains in M5.
 
-The Conductor initially waits for Play. Play/Pause controls tutorial and main Show
-through Run. Tutorial pause holds speech, lesson time and flight. Stop rewinds the
-main Show, resets flight and prepares a paused tutorial, including during training
-or its transition. The readout distinguishes running, paused, loading, buffering,
-blocked audio and retryable errors; the Tutorial chapter is marked while active.
-The Tutorial chapter invokes the same command. The selected main Show language
-is retained. The timeline is the only time display. Language is available before
-Play, throughout training and in the main Show. Changes replace speech in place,
+The Conductor initially waits for Play at the opening of the main Show; its entry
+requests no tutorial, so the timeline shows no Tutorial chapter. Play/Pause
+controls the main Show through Run. Stop rewinds the main Show, returns flight to
+its opening pose and holds until Play. The readout distinguishes running, paused,
+loading, buffering, blocked audio and retryable errors. The selected main Show
+language is retained. The timeline is the only time display. Language is available
+before Play and throughout the main Show. Changes replace speech in place,
 preserving playback, course progress and show position. The selected button
 reports the requested language; old speech may remain audible while a new file
 loads or if replacement fails. `L` toggles language under the same shortcut

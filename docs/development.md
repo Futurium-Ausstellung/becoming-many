@@ -43,6 +43,10 @@ With a development server on port 4180, `bun run test:tutorial-ui` exercises
 the tutorial block, operator skip, main transport and cancellation on Conductor,
 the audience page and its `/start` alias. It captures screenshots under `/tmp`.
 
+`test:tutorial-ui`, `test:language`, `tests/browser/start-handoff.mjs` and the
+tutorial steps of `test:browser` wait for a tutorial that no entry currently
+requests, so they cannot pass until an entry names one again.
+
 For language or native speech replacement changes, `bun run test:language`
 checks live and paused selection, delayed/failed media, rapid changes, earned
 lessons, closing and cleanup. It also requires the Vite development server;

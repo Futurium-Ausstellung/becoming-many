@@ -29,11 +29,11 @@ flags and limitations live in [KIOSK.md](../KIOSK.md).
 
 ## Operator playback and language
 
-Conductor waits for Play with the tutorial prepared. EN/DE is available before
-Play, during training and in the main Show. Language changes replace speech in
-place; they do not restart training, pause playback or reset flight and progress.
-An already paused experience stays paused. Stop explicitly prepares a fresh
-paused tutorial and retains the selected language.
+Conductor waits for Play at the opening of the main Show; no tutorial runs first.
+EN/DE is available before Play and throughout the Show. Language changes replace
+speech in place; they do not pause playback or reset flight and progress. An
+already paused experience stays paused. Stop rewinds the Show, returns flight to
+its opening pose, holds until Play and retains the selected language.
 
 The selected button represents the requested language. While its file loads,
 the previous recording continues; a failed replacement leaves that recording

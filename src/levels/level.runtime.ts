@@ -127,6 +127,7 @@ class LevelRun {
     if (this.request.kind === "show") {
       await this.startPlayback();
       await this.startTutorial();
+      if (!this.request.tutorial) this.openShowWithoutTutorial();
     }
     this.signal.throwIfAborted();
     this.signal.addEventListener("abort", this.onAbort, { once: true });
@@ -286,11 +287,7 @@ class LevelRun {
   private finishTutorial(): void {
     const target = this.skipTarget;
     this.releaseTutorial();
-    this.controls?.resetRig();
-    this.controls?.constrainHeight({
-      minimumGroundClearanceMeters: HANDOFF_SETTINGS.arrivalClearanceMeters,
-      maximumGroundClearanceMeters: HANDOFF_SETTINGS.arrivalClearanceMeters,
-    });
+    this.placeRigAtArrival();
     this.present(
       initialLevelPresentation(this.request),
       this.mainFieldOfViewDegrees,
@@ -301,6 +298,22 @@ class LevelRun {
     if (target?.playing !== false) this.playback?.running.play();
     else this.playback?.running.pause();
     for (const listener of this.showListeners) listener(this.show);
+  }
+
+  /** Without a handoff the Show still opens where one would have arrived. */
+  private openShowWithoutTutorial(): void {
+    if (this.request.kind !== "show") return;
+    this.placeRigAtArrival();
+    if (!this.request.initiallyPaused) this.playback?.running.play();
+  }
+
+  /** Every Show opens from the origin at the same height above the terrain. */
+  private placeRigAtArrival(): void {
+    this.controls?.resetRig();
+    this.controls?.constrainHeight({
+      minimumGroundClearanceMeters: HANDOFF_SETTINGS.arrivalClearanceMeters,
+      maximumGroundClearanceMeters: HANDOFF_SETTINGS.arrivalClearanceMeters,
+    });
   }
 
   private releaseTutorial(): void {
@@ -337,7 +350,11 @@ class LevelRun {
     this.controls?.resetRig();
     this.playback?.running.resetTime();
     this.playback?.update();
-    if (this.request.kind !== "show" || !this.request.tutorial) return;
+    if (this.request.kind !== "show") return;
+    if (!this.request.tutorial) {
+      this.placeRigAtArrival();
+      return;
+    }
     try {
       this.releaseTutorial();
     } catch (error) {

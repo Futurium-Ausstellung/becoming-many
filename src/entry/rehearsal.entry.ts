@@ -14,7 +14,6 @@ import { startLevel } from "../levels/level.runtime";
 import { LEVEL_CATALOG } from "../levels/level-catalog";
 import type { Run } from "../levels/run-contract";
 import type { RunningShow } from "../levels/show-contract";
-import { level as tutorialLevel } from "../levels/start.level";
 import { mountRehearsalTransport } from "../ui/rehearsal/transport.panel";
 import { mountVrEntryButton } from "../ui/shared/xr-entry-button";
 import { loadDeploymentConfig } from "./deployment-config";
@@ -69,7 +68,6 @@ try {
       signal: lifetime.signal,
       kind: "show",
       preset: connectionsLevel,
-      tutorial: tutorialLevel,
       show: {
         schedule: PIECE_SCHEDULE,
         language: resolveNarrationLanguage(request.get("language")),

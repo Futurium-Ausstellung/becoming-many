@@ -105,18 +105,22 @@ derivatives. UI releases only its own presentation resources. The existing
 
 ## Tutorial entry and handoff
 
-The audience routes `/`, `/start`, `/tutorial` and `/?level=start` prepare the
-main show and run `start.level.ts` first. `LevelRun` waits for the complete
-closing narration and final route exit, fades Start, disposes its voice and
-atmosphere, resets the existing rig with eight meters of terrain clearance, and
-starts the main Show at zero. `handoff-settings.ts` owns these transition values.
-The same renderer, listener and XR session remain active throughout.
+No entry currently requests a tutorial. The audience routes `/`, `/start`,
+`/tutorial` and `/?level=start` open the main Show directly with the rig at its
+arrival pose, and audience entry starts automatically. Conductor opens at the
+same pose and waits for Play. The rest of this section describes a Show request
+that names a `tutorial`, which Run still supports.
+
+`LevelRun` runs that preset first, waits for the complete closing narration and
+final route exit, fades Start, disposes its voice and atmosphere, resets the
+existing rig with eight meters of terrain clearance, and starts the main Show at
+zero. `handoff-settings.ts` owns these transition values. The same renderer,
+listener and XR session remain active throughout.
 
 Start exposes completion and presentation presence through its public contract.
 Composition connects resources; Run owns the handoff. Main modules stay inactive
 during the tutorial. Entry mounts transport once; `subscribeShow` reports main
-Show availability without remounting UI. Conductor prepares the same tutorial
-but waits for Play; audience entry starts automatically.
+Show availability without remounting UI.
 
 Language changes update Show and refresh Start's current recording through its
 injected language query. They never invoke the restart path. Start retains the
