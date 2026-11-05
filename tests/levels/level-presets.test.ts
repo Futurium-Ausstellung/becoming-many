@@ -6,6 +6,7 @@
  */
 
 import { expect, test } from "bun:test";
+import { PIECE_PASSAGES } from "../../src/dramaturgy/piece-schedule";
 import { level as connectionsLevel } from "../../src/levels/connections.level";
 import { level as diagnosticLevel } from "../../src/levels/diagnostic.level";
 import { level as echoLevel } from "../../src/levels/echo.level";
@@ -430,4 +431,16 @@ test("Visual integration authors semantic colors without diagnostics", () => {
   expect(visualIntegrationLevel.vegetation?.colors.trunkColor).toBe(0x51447b);
   expect(visualIntegrationLevel.rocks?.colors.lightColor).toBe(0x739fa8);
   expect(visualIntegrationLevel.animals?.colors.furColor).toBe(0xf3d34f);
+});
+
+test("a scheduled swarm passage carries the layer that prints it", () => {
+  // The swarm has no body: it is drawn by a Motion Sense trail ring in the
+  // level's own trail appearance. The Show world that schedules it without the
+  // motion layer would drop the crossing silently, so the pairing is locked here.
+  const swarmScheduled = PIECE_PASSAGES.passages.some(
+    ({ passageId }) => passageId === "mosquitoes",
+  );
+
+  expect(swarmScheduled).toBe(true);
+  expect(connectionsLevel.motion).toBeDefined();
 });

@@ -8,7 +8,7 @@ import { requireElement } from "../ui/shared/dom";
  */
 
 import { resolveNarrationLanguage } from "../dramaturgy/narration-catalog";
-import { PIECE_SCHEDULE } from "../dramaturgy/piece-schedule";
+import { PIECE_PASSAGES, PIECE_SCHEDULE } from "../dramaturgy/piece-schedule";
 import { level as connectionsLevel } from "../levels/connections.level";
 import { startLevel } from "../levels/level.runtime";
 import { LEVEL_CATALOG } from "../levels/level-catalog";
@@ -74,6 +74,7 @@ try {
         schedule: PIECE_SCHEDULE,
         language: resolveNarrationLanguage(request.get("language")),
         states: LEVEL_CATALOG,
+        passages: PIECE_PASSAGES,
       },
     },
   );

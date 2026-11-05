@@ -7,7 +7,7 @@ import { createStartAudio } from "../modules/start/audio/start-audio";
  * Boundary: Startup presentation, lifecycle activation, controls, show following, and frame coordination live elsewhere.
  */
 
-import { type Matrix4, Vector3 } from "three";
+import type { Matrix4 } from "three";
 import { createDesktopController } from "../control/desktop-controller";
 import { createFlightControl } from "../control/flight-control";
 import type { FlightHeightLimits } from "../control/flight-pose";
@@ -18,7 +18,7 @@ import {
 import { FLIGHT_SETTINGS } from "../control/flight-settings";
 import { END_CREDITS } from "../dramaturgy/end-credits";
 import { ORGAN_SCORE } from "../dramaturgy/organ-score";
-import { PIECE_PASSAGES } from "../dramaturgy/piece-schedule";
+import type { PassageSchedule } from "../dramaturgy/passage-schedule";
 import type { ShowSense } from "../dramaturgy/show-levels";
 import { createM5Runtime } from "../m5/runtime/m5.runtime";
 import {
@@ -27,7 +27,6 @@ import {
   loadPassageResources,
   type PassageResources,
 } from "../modules/animal-passages/animal-passages";
-import { MOSQUITO_PASSAGE } from "../modules/animal-passages/passage-definitions";
 import {
   type AnimalBodiesObserver,
   createAnimalsModule,
@@ -93,7 +92,10 @@ import type {
   UnlitMaterialEffect,
 } from "../utils/asset-loader/material-effect";
 import type { WorldModule } from "../world/module-runtime";
-import { XR_VIEW_PITCH_ASSIST_DEGREES } from "../world/viewer-rig";
+import {
+  createRigHeadingReader,
+  XR_VIEW_PITCH_ASSIST_DEGREES,
+} from "../world/viewer-rig";
 import type {
   World,
   WorldContext,
@@ -137,6 +139,8 @@ interface LevelCompositionOptions {
   readonly level: LevelPreset;
   readonly assets: LoadedLevelAssets;
   readonly forShow: boolean;
+  /** The animals this world crosses, or undefined when none do. */
+  readonly passages?: PassageSchedule;
   readonly signal?: AbortSignal;
   readonly sharedAudio?: SpatialAudio;
 }
@@ -158,6 +162,7 @@ export async function composeLevel({
   level,
   assets,
   forShow,
+  passages: passageSchedule,
   signal = new AbortController().signal,
   sharedAudio,
 }: LevelCompositionOptions): Promise<ComposedLevel> {
@@ -383,32 +388,23 @@ export async function composeLevel({
   }
 
   /**
-   * The authored animal crossings. Only a show has them: they are placed by the
-   * schedule, and a static run has no show time to place them against.
+   * The authored animal crossings. Only a show names them: they are placed by
+   * the schedule, and a static run has no show time to place them against.
    */
   function createAnimalPassages(): AnimalPassagesModuleHandle | undefined {
     const resources = assets.passages;
-    if (!forShow || !resources) return undefined;
+    if (!passageSchedule || !resources) return undefined;
 
-    const heading = new Vector3();
     return createAnimalPassagesModule({
       scene: world.scene,
       viewpoint: world.viewpoint,
       worldSurface,
-      schedule: PIECE_PASSAGES,
+      schedule: passageSchedule,
       resources,
       // The rig's yaw is where the visitor is travelling, which is what a route
       // entering behind them is turned against. The camera under it is head
       // pose and would swing the whole route with a glance.
-      readViewHeadingRadians: () => {
-        world.viewerRig.updateWorldMatrix(true, false);
-        heading.set(0, 0, -1).applyQuaternion(world.viewerRig.quaternion);
-        // The yaw that turns −Z onto this heading. Both components are negated
-        // because forward is −Z: reading the raw components instead answers a
-        // half turn away, which sends a route authored to cross in front of the
-        // visitor out behind them.
-        return Math.atan2(-heading.x, -heading.z);
-      },
+      readViewHeadingRadians: createRigHeadingReader(world.viewerRig),
     });
   }
 
@@ -422,16 +418,20 @@ export async function composeLevel({
   function createPassageSwarm(
     passages: AnimalPassagesModuleHandle | undefined,
   ): WorldModule | undefined {
+    const swarm = passages?.swarm;
+    // The ring prints in the level's own trail appearance, so a world that
+    // schedules the swarm must also carry the motion layer. `level-presets`
+    // holds the show to that; without it the crossing would go missing quietly.
     const parameters = level.motion;
-    if (!passages || !parameters) return undefined;
+    if (!swarm || !parameters) return undefined;
 
     return createPassageSwarmModule({
       scene: world.scene,
       parameters,
-      pointCount: MOSQUITO_PASSAGE.pointCount,
-      cloudRadiusMeters: MOSQUITO_PASSAGE.cloudRadiusMeters,
-      cloudHeightMeters: MOSQUITO_PASSAGE.cloudHeightMeters,
-      readCrossing: passages.readSwarmCrossing,
+      pointCount: swarm.pointCount,
+      cloudRadiusMeters: swarm.cloudRadiusMeters,
+      cloudHeightMeters: swarm.cloudHeightMeters,
+      readCrossing: swarm.read,
     });
   }
 
@@ -732,7 +732,7 @@ function hasVisibleSurface(level: WorldComposition): boolean {
 
 export async function loadLevelAssets(
   level: WorldComposition,
-  forShow: boolean,
+  passageSchedule: PassageSchedule | undefined,
   signal?: AbortSignal,
 ): Promise<LoadedLevelAssets> {
   const [vegetation, rocks, animals, passages] = await Promise.allSettled([
@@ -742,7 +742,7 @@ export async function loadLevelAssets(
     ),
     loadGltfAssets(level.rocks ? ROCKS_DEFINITION.assets : [], signal),
     loadGltfAssets(level.animals ? ANIMALS_DEFINITION.species : [], signal),
-    forShow ? loadPassageResources(PIECE_PASSAGES, signal) : undefined,
+    passageSchedule ? loadPassageResources(passageSchedule, signal) : undefined,
   ]);
 
   if (

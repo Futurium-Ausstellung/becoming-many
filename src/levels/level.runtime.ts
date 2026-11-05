@@ -5,6 +5,7 @@
  * Boundary: Authored data and concrete world composition live in dedicated level files.
  */
 
+import type { PassageSchedule } from "../dramaturgy/passage-schedule";
 import { showLevelStateAt } from "../dramaturgy/show-levels";
 import type { M5Runtime } from "../m5/m5-contract";
 import type { VoicePlayback } from "../sound/playback";
@@ -111,7 +112,7 @@ class LevelRun {
     const presentation = initialLevelPresentation(this.request);
     this.assets = await loadLevelAssets(
       this.level,
-      this.request.kind === "show",
+      this.requestedPassages(),
       this.signal,
     );
     this.signal.throwIfAborted();
@@ -228,7 +229,7 @@ class LevelRun {
   private async startTutorial(): Promise<void> {
     if (this.request.kind !== "show" || !this.request.tutorial) return;
     const level = this.request.tutorial;
-    const assets = await loadLevelAssets(level, false, this.signal);
+    const assets = await loadLevelAssets(level, undefined, this.signal);
     this.tutorialAssets = assets;
     this.tutorial = await composeLevel({
       world: this.world,
@@ -386,6 +387,16 @@ class LevelRun {
     return this.unloading;
   };
 
+  /**
+   * The animals this request crosses. Only a show has them: a passage is placed
+   * by show time, and a static run has no show time to place it against.
+   */
+  private requestedPassages(): PassageSchedule | undefined {
+    return this.request.kind === "show"
+      ? this.request.show.passages
+      : undefined;
+  }
+
   private async loadComposition(): Promise<void> {
     if (!this.assets) throw new Error("Level assets are unavailable");
     const composition = await composeLevel({
@@ -393,6 +404,7 @@ class LevelRun {
       level: this.level,
       assets: this.assets,
       forShow: this.request.kind === "show",
+      passages: this.requestedPassages(),
       language:
         this.request.kind === "show"
           ? this.request.show.language

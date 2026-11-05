@@ -4,6 +4,7 @@ import type {
   NarrationSchedule,
   ShowLevelName,
 } from "../dramaturgy/narration-schedule";
+import type { PassageSchedule } from "../dramaturgy/passage-schedule";
 import type { ShowClock, ShowTimeSample } from "../dramaturgy/show-clock";
 import type { ShowLevelState, ShowSense } from "../dramaturgy/show-levels";
 import type { DroneOrgan } from "../sound/drone-organ/organ-frame";
@@ -20,6 +21,12 @@ export interface ShowRequest {
   readonly language: NarrationLanguage;
   /** Borrow the level catalog directly; do not author a second state table. */
   readonly states: Readonly<Record<ShowLevelName, ShowLevelState>>;
+  /**
+   * The animals that cross this show, and when. Without it no passage model or
+   * route is loaded at all. It sits beside the level states rather than inside
+   * one because a passage is placed on the timeline, not carried by a sense.
+   */
+  readonly passages: PassageSchedule;
 }
 
 export interface RunningShow {

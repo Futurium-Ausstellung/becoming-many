@@ -36,7 +36,9 @@ A passage's whole pose comes from `passageProgressAt(schedule, id, showTime)`.
 Nothing is accumulated across frames, so scrubbing into a crossing lands the
 animal at the point on its route where playing through would have put it, and
 scrubbing back out takes it away again — the same rule the sense strengths and
-the background follow.
+the background follow. Position along the route is derived; the bat's bearing
+is not: it takes the visitor's heading as it enters, so scrubbing out and back
+in can send it across on a different bearing.
 
 That is the one deliberate departure from the predecessor project, where these
 were fire-and-forget events pulsed over a bus: a rising edge cannot be seeked,
@@ -108,6 +110,13 @@ at zero strength while they cross. The swarm therefore owns its own trail ring
 at full strength, composed beside Motion Sense rather than inside it. It is the
 same rule as the flown animals wearing plain unlit materials — a passage must
 land in the world that is still standing, not in the one it is announcing.
+
+The two modules meet at `src/modules/passage-crossing.ts` and nowhere else.
+This module's handle offers a `PassageSwarmCrossing` — where the cloud stands
+this instant, and the shape that prints it — only when the schedule actually
+places the swarm. The cloud shape travels with the reader because both are
+authored against the same crossing, so nothing outside this folder reaches into
+`passage-definitions.ts` to size a ring.
 
 ## Not here yet
 
