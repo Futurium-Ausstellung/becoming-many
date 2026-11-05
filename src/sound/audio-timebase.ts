@@ -7,24 +7,7 @@
 
 const RESUME_GESTURE_EVENTS = ["pointerdown", "keydown"] as const;
 
-export interface AudioTimebase {
-  /**
-   * Stalls while the context is suspended, and that is the intended behavior:
-   * if the audio hardware is not running, the show is not advancing either.
-   * A headset going to sleep therefore freezes show time instead of letting it
-   * run away from the narration.
-   */
-  readonly readSeconds: () => number;
-
-  /**
-   * Whether the hardware clock is actually running. Only a gesture in this
-   * window can resume a suspended context, so an operator surface in another
-   * window can report the stall but never clear it.
-   */
-  readonly readState: () => AudioContextState;
-
-  readonly unload: () => void;
-}
+import type { AudioTimebase } from "./playback";
 
 /**
  * The audio hardware clock is the timebase; the show clock built on it stays
@@ -35,19 +18,14 @@ export interface AudioTimebase {
 export function createAudioTimebase(): AudioTimebase {
   const audioContext = new AudioContext();
 
-  function release(): void {
-    for (const eventName of RESUME_GESTURE_EVENTS) {
-      window.removeEventListener(eventName, resume);
-    }
-  }
+  let unloading: Promise<void> | undefined;
 
   function resume(): void {
-    // Release only once the context is actually running. Dropping the
-    // listeners up front would leave a rejected resume — or a context the
-    // device suspends again later — with nothing left to bring it back.
-    void audioContext.resume().then(release, () => undefined);
+    if (unloading || audioContext.state === "running") return;
+    void audioContext.resume().catch(() => undefined);
   }
 
+  // Keep gestures until unload: a running context can suspend again later.
   for (const eventName of RESUME_GESTURE_EVENTS) {
     window.addEventListener(eventName, resume);
   }
@@ -57,9 +35,11 @@ export function createAudioTimebase(): AudioTimebase {
 
     readState: () => audioContext.state,
 
-    unload(): void {
-      release();
-      void audioContext.close();
+    unload(): Promise<void> {
+      for (const eventName of RESUME_GESTURE_EVENTS)
+        window.removeEventListener(eventName, resume);
+      unloading ??= audioContext.close();
+      return unloading;
     },
   };
 }

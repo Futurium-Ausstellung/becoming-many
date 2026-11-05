@@ -19,18 +19,12 @@ import {
   resolveStaticPopulation,
   type StaticPopulationPreset,
 } from "../static-population";
-import { VEGETATION_DEFINITION } from "./vegetation-definition";
+import {
+  hasVegetationClearance,
+  VEGETATION_DEFINITION,
+} from "./vegetation-definition";
 
 const VEGETATION_CHUNK_LEVEL = 2;
-
-/**
- * The rendered module additionally rejects instances whose scaled model
- * footprint touches the river channel; that radius needs the loaded asset,
- * which the Scent World does not load at all. This is the same conservative
- * stand-in the Connections anchors use, so scent and trees disagree only on
- * rare riverbank placements.
- */
-const RIVER_FOOTPRINT_STAND_IN_METERS = 2.5;
 
 /**
  * Which signature every model carries. Grouped by what a nose would plausibly
@@ -73,7 +67,11 @@ export function createVegetationScentSource(
     chunkSize,
     parameters.candidateSpacingMeters,
   );
-  const groupIndexByAsset = createGroupIndexByAsset();
+  for (const { id } of VEGETATION_DEFINITION.assets) {
+    if (!SCENT_GROUP_BY_ASSET[id]) {
+      throw new Error(`Vegetation asset has no scent group: ${id}`);
+    }
+  }
 
   return {
     groupIds: PLANT_SCENT_GROUP_IDS,
@@ -98,42 +96,18 @@ export function createVegetationScentSource(
         worldSurface,
         chunkSize,
         { chunkX, chunkZ, chunkSizeMeters },
-        (candidate) => {
-          const { riverChannelMarginMeters } = worldSurface.zoneConditionsAt(
-            candidate.worldX,
-            candidate.worldZ,
-          );
-          return -riverChannelMarginMeters >= RIVER_FOOTPRINT_STAND_IN_METERS;
-        },
+        (candidate) => hasVegetationClearance(worldSurface, candidate),
         ({ candidate, model }, groundY) => {
-          const groupIndex = groupIndexByAsset.get(model.id);
-          if (groupIndex === undefined) return;
+          const groupId = SCENT_GROUP_BY_ASSET[model.id];
+          if (groupId === undefined) return;
           pushPlant(
             candidate.worldX,
             groundY,
             candidate.worldZ,
             getStaticPlacementHeight(parameters.seed, model, candidate),
-            groupIndex,
+            groupId,
           );
         },
       ),
   };
-}
-
-/**
- * Resolve the mapping once and fail loudly on an unmapped model: a plant
- * added without a signature would otherwise silently stop smelling.
- */
-function createGroupIndexByAsset(): ReadonlyMap<string, number> {
-  const groupIndexByAsset = new Map<string, number>();
-
-  for (const { id } of VEGETATION_DEFINITION.assets) {
-    const groupId = SCENT_GROUP_BY_ASSET[id];
-    if (!groupId) {
-      throw new Error(`Vegetation asset has no scent group: ${id}`);
-    }
-    groupIndexByAsset.set(id, PLANT_SCENT_GROUP_IDS.indexOf(groupId));
-  }
-
-  return groupIndexByAsset;
 }

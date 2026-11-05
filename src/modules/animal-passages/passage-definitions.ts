@@ -82,8 +82,8 @@ const BAT_ROUTE_INITIAL_DIRECTION = new Vector3(
  */
 const BAT_PASSAGE: PassageFlightDefinition = {
   passageId: "bat",
-  modelUrl: "/passages/bat.glb",
-  routeUrl: "/passages/bat-route.glb",
+  modelUrl: "/models/animals/bat.glb",
+  routeUrl: "/routes/animal-passages/bat-route.glb",
   wingspanMeters: 0.7,
   routeDurationSeconds: 10.416667,
   approachDurationSeconds: 0,
@@ -161,7 +161,7 @@ export interface PassageSwarmDefinition {
  */
 export const MOSQUITO_PASSAGE: PassageSwarmDefinition = {
   passageId: "mosquitoes",
-  routeUrl: "/passages/mosquito-route.glb",
+  routeUrl: "/routes/animal-passages/mosquito-route.glb",
   durationSeconds: 15,
   routeScaleToMeters: 1,
   axisStretch: new Vector3(1.5, 1.5, 0.5),

@@ -6,19 +6,16 @@
  */
 
 import type { Matrix4, Scene } from "three";
-import {
-  disposeGltfAssets,
-  type GltfAssets,
-} from "../../utils/asset-loader/gltf-assets";
+import type { GltfAssets } from "../../utils/asset-loader/gltf-assets";
 import type { UnlitMaterialEffect } from "../../utils/asset-loader/material-effect";
 import type { WorldModule } from "../../world/module-runtime";
-import type { Viewpoint } from "../../world/viewer-rig";
+import type { Viewpoint } from "../../world/viewpoint";
 import type { WorldSurface } from "../../world-surface/world-surface";
+import type { AnimalSpeciesId } from "../scent-sources";
 import {
   type AnimalActors,
   createAnimalActors,
   disposeAnimalActors,
-  getVisibleActorPositions,
   readVisibleAnimalBodies,
   updateAnimalActors,
 } from "./animal-actors";
@@ -56,7 +53,7 @@ export interface AnimalBody {
   readonly heightMeters: number;
 
   /** Which species stands here; senses that differ per species need it. */
-  readonly speciesId: string;
+  readonly speciesId: AnimalSpeciesId;
 }
 
 /** The writable form the module refills in place each frame. */
@@ -86,34 +83,18 @@ interface AnimalsState {
   readonly bodies: MutableAnimalBody[];
 }
 
-/** The world module plus the live positions other senses may consume. */
-export interface AnimalsModuleHandle {
-  readonly module: WorldModule;
-  /** Tightly packed world xyz triples of the currently visible actors. */
-  readonly getVisibleWorldPositions: () => Float32Array;
-}
-
 export function createAnimalsModule(
   options: AnimalsModuleOptions,
-): AnimalsModuleHandle {
+): WorldModule {
   validateAnimalsDefinition(options.definition);
   const state: AnimalsState = { population: undefined, bodies: [] };
-  const packedPositions = new Float32Array(options.definition.maxVisible * 3);
 
   return {
-    module: {
-      load: () => loadAnimals(state, options),
-      activate: () => setAnimalsVisible(state, true),
-      update: (deltaSeconds) => updateAnimals(state, options, deltaSeconds),
-      deactivate: () => setAnimalsVisible(state, false),
-      unload: () => unloadAnimals(state, options.scene, options.assets),
-    },
-    getVisibleWorldPositions: () => {
-      const actorCount = state.population
-        ? getVisibleActorPositions(state.population, packedPositions)
-        : 0;
-      return packedPositions.subarray(0, actorCount * 3);
-    },
+    load: () => loadAnimals(state, options),
+    activate: () => setAnimalsVisible(state, true),
+    update: (deltaSeconds) => updateAnimals(state, options, deltaSeconds),
+    deactivate: () => setAnimalsVisible(state, false),
+    unload: () => unloadAnimals(state, options.scene),
   };
 }
 
@@ -191,16 +172,11 @@ function setAnimalsVisible(state: AnimalsState, visible: boolean): void {
   if (state.population) state.population.group.visible = visible;
 }
 
-function unloadAnimals(
-  state: AnimalsState,
-  scene: Scene,
-  assets: GltfAssets,
-): void {
+function unloadAnimals(state: AnimalsState, scene: Scene): void {
   const population = state.population;
   if (!population) return;
 
   state.population = undefined;
   scene.remove(population.group);
   disposeAnimalActors(population);
-  disposeGltfAssets(assets);
 }

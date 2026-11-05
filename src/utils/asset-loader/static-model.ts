@@ -33,7 +33,6 @@ export interface StaticModelAsset {
   readonly parts: readonly StaticModelPart[];
   readonly height: number;
   readonly minimumY: number;
-  readonly footprintRadius: number;
 }
 
 /** Extract every Mesh below the configured object, including the object itself. */
@@ -51,33 +50,30 @@ export function createStaticModelAsset(
   const worldToModel = createTranslationFreeModelTransform(
     sourceObject.matrixWorld,
   );
-  sourceObject.traverse((object) => {
-    if (!(object instanceof Mesh)) return;
-    const sourceMatrix = worldToModel.clone().multiply(object.matrixWorld);
-    parts.push(createModelPart(object, sourceMatrix, colorForMaterial));
-    expandModelBounds(modelBounds, object.geometry, sourceMatrix);
-  });
-  if (parts.length === 0) {
-    throw new Error(`GLTF object contains no meshes: ${objectName}`);
-  }
+  try {
+    sourceObject.traverse((object) => {
+      if (!(object instanceof Mesh)) return;
+      const sourceMatrix = worldToModel.clone().multiply(object.matrixWorld);
+      parts.push(createModelPart(object, sourceMatrix, colorForMaterial));
+      expandModelBounds(modelBounds, object.geometry, sourceMatrix);
+    });
+    if (parts.length === 0) {
+      throw new Error(`GLTF object contains no meshes: ${objectName}`);
+    }
 
-  const height = modelBounds.max.y - modelBounds.min.y;
-  if (!Number.isFinite(height) || height <= 0) {
-    throw new Error(`GLTF object has no measurable height: ${objectName}`);
+    const height = modelBounds.max.y - modelBounds.min.y;
+    if (!Number.isFinite(height) || height <= 0) {
+      throw new Error(`GLTF object has no measurable height: ${objectName}`);
+    }
+    return {
+      parts,
+      height,
+      minimumY: modelBounds.min.y,
+    };
+  } catch (error) {
+    for (const part of parts) disposeModelPart(part);
+    throw error;
   }
-  return {
-    parts,
-    height,
-    minimumY: modelBounds.min.y,
-    footprintRadius: getFootprintRadius(modelBounds),
-  };
-}
-
-/** Return a rotation-safe horizontal radius around the model origin. */
-function getFootprintRadius(bounds: Box3): number {
-  const furthestX = Math.max(Math.abs(bounds.min.x), Math.abs(bounds.max.x));
-  const furthestZ = Math.max(Math.abs(bounds.min.z), Math.abs(bounds.max.z));
-  return Math.hypot(furthestX, furthestZ);
 }
 
 /**
@@ -109,17 +105,28 @@ function createModelPart(
   sourceMatrix: Matrix4,
   colorForMaterial: StaticModelColor | undefined,
 ): StaticModelPart {
-  const material = Array.isArray(sourceMesh.material)
-    ? sourceMesh.material.map((source) =>
+  const sources = Array.isArray(sourceMesh.material)
+    ? sourceMesh.material
+    : [sourceMesh.material];
+  const materials: MeshBasicMaterial[] = [];
+  try {
+    for (const source of sources) {
+      materials.push(
         createUnlitMaterial(
           source,
           colorForMaterial?.(source, sourceMesh.name),
         ),
-      )
-    : createUnlitMaterial(
-        sourceMesh.material,
-        colorForMaterial?.(sourceMesh.material, sourceMesh.name),
       );
+    }
+  } catch (error) {
+    for (const material of materials) material.dispose();
+    throw error;
+  }
+  const material = Array.isArray(sourceMesh.material)
+    ? materials
+    : materials[0];
+  if (!material)
+    throw new Error(`GLTF mesh has no material: ${sourceMesh.name}`);
 
   return {
     geometry: sourceMesh.geometry,

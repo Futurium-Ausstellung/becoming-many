@@ -34,10 +34,11 @@ import {
 } from "../../src/modules/scent-particles/scent-trail-field";
 import type {
   PlantScentSource,
+  PushScentPlant,
   ScentActorBody,
 } from "../../src/modules/scent-sources";
 import { StreamQueue } from "../../src/world/stream-queue";
-import type { Viewpoint } from "../../src/world/viewer-rig";
+import type { Viewpoint } from "../../src/world/viewpoint";
 
 const TEST_CHUNK_SIZE = 64;
 const PLANTS_PER_TEST_CHUNK = 3;
@@ -45,25 +46,31 @@ const CONIFER_PARTICLES = 4;
 const BUSH_PARTICLES = 2;
 const TEST_PLANT_HEIGHT_METERS = 8;
 
+// @ts-expect-error Providers must name a group rather than send a palette index.
+const invalidPlantGroup: Parameters<PushScentPlant>[4] = 0;
+// @ts-expect-error Actor bodies use the current shared species vocabulary.
+const invalidSpecies: ScentActorBody["speciesId"] = "unicorn";
+void [invalidPlantGroup, invalidSpecies];
+
 describe("Scent Particles material", () => {
   test("patches life-cycle motion, size fade, and the circle shape", () => {
     const parameters = createScentParameters();
     const material = createScentParticleMaterial(parameters);
     const shader = compileMaterialForTest(material.pointsMaterial);
 
-    expect(shader.vertexShader).toContain("animateScentParticle");
-    expect(shader.vertexShader).toContain("scentVisible");
-    expect(shader.vertexShader).toContain("scentRise");
-    expect(shader.vertexShader).toContain("getScentParticleClipPosition");
+    expect(shader.vertexShader).toContain(
+      "transformed = animateScentParticle(transformed);",
+    );
+    expect(shader.vertexShader).toContain(
+      "gl_Position = getScentParticleClipPosition(gl_Position);",
+    );
     expect(shader.vertexShader).toContain(
       "gl_PointSize *= getScentParticleSizeScale();",
     );
     expect(shader.fragmentShader).toContain(
       "discardOutsideScentParticleCircle();",
     );
-    expect(shader.vertexShader).toContain("scentWind");
     expect(shader.uniforms.scentIntensity?.value).toBe(1);
-    expect(shader.vertexShader).toContain("scentSenseFade");
     expect(shader.uniforms.scentSenseFade?.value).toBe(1);
     expect(shader.uniforms.scentRiseDuration?.value).toBe(10);
     expect(shader.uniforms.scentDriftAmplitude?.value).toBe(0.4);
@@ -83,11 +90,9 @@ describe("Scent Particles material", () => {
     const material = createScentTrailMaterial({ ...parameters, animals });
     const shader = compileMaterialForTest(material.pointsMaterial);
 
-    expect(shader.vertexShader).toContain("animateScentTrailParticle");
-    expect(shader.vertexShader).toContain("scentPrintTime");
-    expect(shader.vertexShader).toContain("scentPhase");
-    expect(shader.vertexShader).toContain("scentWind");
-    expect(shader.vertexShader).toContain("scentSenseFade");
+    expect(shader.vertexShader).toContain(
+      "transformed = animateScentTrailParticle(transformed);",
+    );
     expect(shader.uniforms.scentTrailLifetime?.value).toBe(20);
     expect(shader.uniforms.scentLoopSeconds?.value).toBe(60);
     expect(material.pointsMaterial.customProgramCacheKey()).not.toBe(
@@ -309,7 +314,7 @@ describe("Scent Particles trail layer", () => {
     );
 
     const cursorBefore = field.printCursor;
-    printScentTrail(field, [{ ...body, speciesId: "unicorn" }], 1, 1);
+    printScentTrail(field, [{ ...body, speciesId: "rat" }], 1, 1);
     expect(field.printCursor).toBe(cursorBefore);
 
     disposeScentTrailField(field);
@@ -321,6 +326,10 @@ test("one show fade dims both layers of the sense at once", () => {
   const viewerPosition = new Vector3();
   const viewpoint: Viewpoint = {
     worldPosition: viewerPosition,
+    worldBodyDirection: new Vector3(0, 0, -1),
+    worldDirection: new Vector3(0, 0, -1),
+    worldUp: new Vector3(0, 1, 0),
+    viewHalfAngleRadians: Math.PI / 4,
     viewDistanceMeters: 24,
   };
   const streamQueue = new StreamQueue(
@@ -353,11 +362,136 @@ test("one show fade dims both layers of the sense at once", () => {
 });
 
 describe("Scent Particles streaming", () => {
+  test.each([0, 2])(
+    "retries rejected slots and replaces stale work after %i steps",
+    (stepsBeforeReassignment) => {
+      const scene = new Scene();
+      const worldPosition = new Vector3();
+      const defaults = createScentParameters();
+      const particlesPerPlant = 128;
+      const parameters = {
+        ...defaults,
+        plants: {
+          ...defaults.plants,
+          conifer: { ...defaults.plants.conifer, particlesPerPlant },
+          bush: { ...defaults.plants.bush, particlesPerPlant },
+        },
+      };
+      const source = createTestPlantSource();
+      const particlesPerSlot =
+        particlesPerPlant * source.maxPlantsPerChunk(TEST_CHUNK_SIZE);
+      const gatheredChunks: number[] = [];
+      const plantSource: PlantScentSource = {
+        ...source,
+        appendChunkPlants: (chunkX, chunkZ, chunkSize, pushPlant) => {
+          gatheredChunks.push(chunkX);
+          if (chunkX !== 7)
+            source.appendChunkPlants(chunkX, chunkZ, chunkSize, pushPlant);
+        },
+      };
+      let blocked = true;
+      const streamQueue = new StreamQueue(
+        { budgetMilliseconds: 1, capacity: 1 },
+        () => 0,
+      );
+      streamQueue.enqueue({
+        key: {},
+        isCurrent: () => blocked,
+        runStep: () => false,
+      });
+      const { module } = createScentParticlesModule({
+        scene,
+        viewpoint: {
+          worldPosition,
+          worldBodyDirection: new Vector3(0, 0, -1),
+          worldDirection: new Vector3(0, 0, -1),
+          worldUp: new Vector3(0, 1, 0),
+          viewHalfAngleRadians: Math.PI / 4,
+          viewDistanceMeters: 0,
+        },
+        parameters,
+        plantSource,
+        streamQueue,
+      });
+      module.load();
+      const points = scene.children[0];
+      if (!(points instanceof Points)) throw new Error("Expected Points");
+      const position = points.geometry.getAttribute("position");
+      const visibility = points.geometry.getAttribute("scentVisible");
+      const initialPositions = position.array.slice();
+      gatheredChunks.length = 0;
+
+      // Rejection hides only the recycled edge and never generates particles.
+      worldPosition.x = TEST_CHUNK_SIZE;
+      for (let frame = 0; frame < 10; frame++) {
+        module.update?.(1 / 90);
+        streamQueue.update();
+      }
+      expect(gatheredChunks).toEqual([]);
+      expect(position.array).toEqual(initialPositions);
+      expect(position).toHaveProperty("version", 0);
+      expect(visibility.array.slice(0, particlesPerSlot)).toEqual(
+        new Uint8Array(particlesPerSlot).fill(1),
+      );
+      expect(
+        visibility.array.slice(2 * particlesPerSlot, 3 * particlesPerSlot),
+      ).toEqual(new Uint8Array(particlesPerSlot));
+      expect(visibility.updateRanges).toHaveLength(3);
+
+      // Replace rejected work, then admit it without another boundary crossing.
+      worldPosition.x = 4 * TEST_CHUNK_SIZE;
+      module.update?.(1 / 90);
+      blocked = false;
+      module.update?.(1 / 90);
+      for (let step = 0; step < stepsBeforeReassignment; step++)
+        streamQueue.update();
+      expect(gatheredChunks).toEqual(stepsBeforeReassignment === 0 ? [] : [3]);
+      expect(visibility.array.every((value: number) => value === 0)).toBe(true);
+      expect(position).toHaveProperty("version", 0);
+
+      // Even a partially written old assignment must never become visible.
+      worldPosition.x = 7 * TEST_CHUNK_SIZE;
+      module.update?.(1 / 90);
+      gatheredChunks.length = 0;
+      for (let frame = 0; frame < 32; frame++) {
+        streamQueue.update();
+        module.update?.(1 / 90);
+      }
+      expect(streamQueue.size).toBe(0);
+      expect(gatheredChunks.sort()).toEqual([6, 6, 6, 7, 7, 7, 8, 8, 8]);
+      expect(visibility.array.slice(0, particlesPerSlot)).toEqual(
+        new Uint8Array(particlesPerSlot).fill(1),
+      );
+      expect(
+        visibility.array.slice(particlesPerSlot, 2 * particlesPerSlot),
+      ).toEqual(new Uint8Array(particlesPerSlot));
+      expect(position.getX(0)).toBeGreaterThan(6 * TEST_CHUNK_SIZE);
+
+      // Unload invalidates both admitted and rejected jobs before a new field.
+      worldPosition.x += 3 * TEST_CHUNK_SIZE;
+      module.update?.(1 / 90);
+      streamQueue.update();
+      module.unload();
+      module.load();
+      gatheredChunks.length = 0;
+      module.update?.(1 / 90);
+      streamQueue.update();
+      expect(streamQueue.size).toBe(0);
+      expect(gatheredChunks).toEqual([]);
+      expect(scene.children[0]).not.toBe(points);
+      module.unload();
+    },
+  );
+
   test("keeps one fixed draw while recycling chunk edges", () => {
     const scene = new Scene();
     const viewerPosition = new Vector3();
     const viewpoint: Viewpoint = {
       worldPosition: viewerPosition,
+      worldBodyDirection: new Vector3(0, 0, -1),
+      worldDirection: new Vector3(0, 0, -1),
+      worldUp: new Vector3(0, 1, 0),
+      viewHalfAngleRadians: Math.PI / 4,
       viewDistanceMeters: 24,
     };
     const streamQueue = new StreamQueue(
@@ -426,6 +560,10 @@ describe("Scent Particles streaming", () => {
     const viewerPosition = new Vector3();
     const viewpoint: Viewpoint = {
       worldPosition: viewerPosition,
+      worldBodyDirection: new Vector3(0, 0, -1),
+      worldDirection: new Vector3(0, 0, -1),
+      worldUp: new Vector3(0, 1, 0),
+      viewHalfAngleRadians: Math.PI / 4,
       viewDistanceMeters: 24,
     };
     const streamQueue = new StreamQueue(
@@ -470,6 +608,10 @@ describe("Scent Particles wind", () => {
     const viewerPosition = new Vector3();
     const viewpoint: Viewpoint = {
       worldPosition: viewerPosition,
+      worldBodyDirection: new Vector3(0, 0, -1),
+      worldDirection: new Vector3(0, 0, -1),
+      worldUp: new Vector3(0, 1, 0),
+      viewHalfAngleRadians: Math.PI / 4,
       viewDistanceMeters: 24,
     };
     const streamQueue = new StreamQueue(
@@ -578,7 +720,7 @@ function createTestPlantSource(): PlantScentSource {
           Math.sin(worldX * 0.05 + worldZ * 0.03),
           worldZ,
           TEST_PLANT_HEIGHT_METERS,
-          plantIndex === 1 ? 1 : 0,
+          plantIndex === 1 ? "bush" : "conifer",
         );
       }
     },

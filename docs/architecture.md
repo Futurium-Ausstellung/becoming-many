@@ -1,174 +1,213 @@
 # Architecture
 
-This document describes the current implementation. Product direction and open
-deployment choices live under [direction](direction/README.md).
+This document defines the binding architecture for current and future work.
+The code may still contain issue-backed migration debt; new work must not add
+exceptions. GitHub issues own the removal sequence and acceptance evidence.
 
-## Runtime Surfaces
+## Integration star
 
-The build has four browser entries:
+The existing Run and Level Composition form one two-phase integration centre.
+Composition constructs and connects once. Run owns the live experience lifetime
+and frame integration. This is not a reason to introduce another application
+owner.
 
-- `index.html` loads `src/main.ts`: the complete rehearsal show only.
-- `test.html` loads `src/test-main.ts`: standalone levels, benchmarks,
-  headset diagnostics, and direct-M5 development.
-- `conductor.html` loads `src/conductor/conductor-main.ts`: the operator surface
-  with the show running in the same page.
-- `flash.html` loads `src/flash/flash-main.ts`: Web Serial firmware setup for the
-  M5 controller.
-
-`station/station-server.ts` is a separate Bun process. It serves `dist/`,
-`/config`, and `/health`; it is not bundled into the application and owns no
-show state.
-
-## Composition and Frame Flow
-
-`src/levels/level-runtime.ts` is the startup and frame-coordination root. A
-static request contains one independent `LevelPreset`; a show request contains
-the separate construction-only `ShowComposition` and narrow `ShowLevelState`
-map. The runtime loads the required assets, starts `src/world/world-runtime.ts`,
-applies the opening presentation, delegates concrete construction to
-`src/levels/level-composition.ts`, activates the returned module list, and
-connects controls and optional show following. Presentation is applied before
-any module derives a fixed spatial window from the camera.
-
-Test UI sampling and overlay creation are entry-owned optional dependencies.
-Legacy Grass and Zone Visualizer implementations load only for the standalone
-presets that author them; the rehearsal show does not fetch those chunks.
-
-The single frame loop is owned by World Runtime:
-
-```text
-timer and viewer rig
-→ controls and show state
-→ active module updates
-→ bounded stream-queue work
-→ one render
+```mermaid
+flowchart TD
+  Entry["Entry"] --> UI["UI"]
+  Entry --> Run["Run: lifetime and frame integration"]
+  Run --> Composition["Composition: one-time construction and wiring"]
+  Composition --> Show["Show"]
+  Composition --> World["World"]
+  Composition --> Control["Control and M5"]
+  Composition --> Sound["Sound"]
+  Composition --> Content["Content modules"]
+  Show -.->|commands and observations| Run
+  World -.->|viewpoint and rendering facts| Run
+  Control -.->|rig movement| Run
+  Sound -.->|readiness and playback facts| Run
+  Content -.->|module contracts| Run
 ```
 
-Modules never create a private animation loop. The code that creates a Three.js
-or browser resource owns its complete disposal.
+The centre is deliberately small:
 
-## Source Ownership
+- `level-composition.ts` may import concrete leaf factories and connect their
+  narrow contracts. It owns no clock, frame loop, runtime policy, or persistent
+  domain state.
+- `level.runtime.ts` owns startup, frame integration, handoff, cancellation,
+  restart, and complete end. It contains no geometry, audio, UI, or content
+  algorithms.
+- No `Application`, coordinator, command bus, event bus, service locator,
+  plugin system, or global mutable store is added around these owners.
+
+## Import rules
+
+Concrete leaves never import concrete peers. Forbidden examples include
+Content to Content, Start to Control, Show to Start, Sound to Content, UI to an
+Engine implementation, and World to Content. A type-only import from another
+leaf's implementation file is still a peer dependency.
+
+| From | Allowed production dependencies |
+| --- | --- |
+| Entry | UI, the public Run contract, deployment contracts, selected presets |
+| UI | Pure view queries and public handle types; no Engine implementation |
+| Run | Composition and public contracts for Show, World, Control, M5, and Sound |
+| Composition | Level recipes, concrete factories, and neutral contracts |
+| Show | Dramaturgy and Sound contracts; no concrete Content or World |
+| World | World internals and narrow technical utilities; no Content, Show, or UI |
+| Content | Its own domain, World/WorldSurface contracts, and neutral module contracts |
+| Control and M5 | Their own internals plus rig, surface, and wire contracts; no Start or Show |
+| Sound | Sound internals and Dramaturgy queries; no concrete Content |
+| Station | Platform-neutral contracts under `shared/` only |
+
+External libraries may be imported where the owning implementation uses them.
+They do not provide a route around project boundaries.
+
+## Contracts and data flow
+
+- Put a contract at the owner of the fact or at an existing neutral boundary,
+  never inside an unrelated consumer implementation.
+- Composition injects concrete implementations. Leaves receive only the
+  commands, observations, read-only facts, or resource capabilities they use.
+- A public handle exposes the smallest current consumer surface. Do not pass a
+  broad owner and rely on convention, create a forwarding wrapper, or hide
+  dependencies behind a re-export barrel.
+- World-only facts are not sufficient to justify a shared contract. Add one only
+  for a real production boundary with an identified owner and consumer.
+- Reused mutable buffers are borrowed for the documented validity window. Their
+  consumers do not retain or mutate them.
+
+The principal live flow is:
 
 ```text
-src/
-├── benchmark/       deterministic in-page route and report data
-├── conductor/       operator page, panels, snapshots, and actions
-├── control/         desktop and M5 flight mapping and constraints
-├── dev/             opt-in diagnostics and rehearsal controls
-├── dramaturgy/      show clock, schedule, cue layout, and level timing
-├── flash/           M5 Web Serial setup page
-├── levels/          typed presets, startup coordination, and world composition
-├── m5/              untrusted controller protocol and polling adapter
-├── modules/         unloadable visual and world content
-├── sound/           narration, the audio timebase, and the drone organ
-├── station/         browser-side deployment facts
-├── test-ui/         browser-only frame metrics and diagnostic overlay
-├── test-main.ts     standalone level and benchmark browser entry
-├── utils/           narrow shared technical utilities
-├── world/           permanent runtime, XR, chunks, and scheduling
-└── world-surface/   deterministic read-only height and zone facts
+input -> Control -> viewer rig movement
+Show -> presentation and playback decisions
+Run -> one shared frame sample and integration
+World -> publish viewpoint -> update active modules -> bounded stream work
+World -> render once
 ```
 
-README-only folders under `src/modules` and `src/utils` reserve named extension
-boundaries. They contain no implementation and remain explicitly documented as
-such.
+Every flight input source exposes only `forwardTilt` and `rightTilt`, normalized
+to −1..1. Control reads every connected source on each live frame, adds the axes
+in the fixed order wired by Composition, and clamps each sum to −1..1. Neutral,
+disconnected, or stale sources return zero axes. This is the complete conflict
+rule: desktop and M5 input remain simultaneous, with no exclusive mode or
+priority policy. A later source such as a gamepad can implement the same
+contract without changing Run or the flight model.
 
-## Permanent World
+Desktop keys emulate continuous body tilt at a bounded rate. Holding reaches a
+fixed tilt limit; release returns to neutral and reversal crosses through it.
+Key events only update held keys; one per-frame source read advances tilt.
+Pointer-lock loss, blur and unload clear keys and emulated tilt. The M5 runtime
+reports physical tilt directly, retaining only polling, freshness and host
+lifetime. Firmware owns normalization and calibration; the browser applies no
+smoothing, auto-neutralization or intermediate control frame to device input.
 
-`src/world/world-runtime.ts` creates the scene, viewer rig and child camera,
-WebGL2 renderer, XR control, module runtime, and stream queue. Renderer creation
-requests an XR-compatible WebGL2 context from the start.
+Control owns the flight model and the rig's pitch, bank and heading. Forward
+tilt pitches down; side tilt banks and turns the heading. Pitch and bank are
+bounded at ±45 degrees. The rig moves forward at constant path speed, with
+neutral tilt flying level. Mouse and headset pose remain local and cannot steer.
+During XR, Control applies heading only to the rig because physical headset
+tracking already includes body pitch and bank. Run supplies frame time, speed,
+XR state and height constraints; Composition constructs and connects sources.
 
-`src/world/viewer-rig.ts` separates locomotion from local camera pose. Desktop
-look and WebXR tracking own the camera; desktop or M5 flight moves the rig. The
-combined world-space viewpoint is published to modules.
+World publishes resulting position, actual frame displacement after height
+limits, and eye facts. It never derives body orientation from displacement.
+Between-frame resets are excluded from displacement. Desktop gaze inherits the
+rig's pitch and bank; XR adds the existing prone-posture assistance and restores
+saved desktop camera pose on exit.
+`worldBodyDirection` publishes the rendered axis before local gaze; Credits
+consumes this observation without reconstructing a heading or pitch offset.
 
-`src/world/module-runtime.ts` runs the explicit module lifecycle:
+Show owns time, language, narration and presentation policy. Run exposes language
+independently of main transport availability and connects changes to Start.
+Sound prepares one silent replacement while current speech continues; neither
+language selection nor delayed replacement restarts or pauses the experience.
+Start maps native spoken markers to its initial cue timeline, preserving course,
+progress and presentation. The requested language may differ from the audible
+source while replacement is pending or fails. Sound retains the usable source;
+UI does not infer a second language state from media readiness. Main Show keeps
+its shared schedule offsets; static runs retain their request language.
+Content and Sound consume injected facts without reaching into other
+implementations. Start guidance approximates continued steering from heading
+change per meter of actual rig movement. Its arc preview owns no flight model
+or loop.
 
-```text
-load → activate → update → deactivate → unload
-```
+## Local domain stars
 
-`src/world/chunk-system.ts` and `volume-chunk-window.ts` map an infinite logical
-grid onto fixed recyclable slots. `stream-queue.ts` advances cooperative jobs
-within one shared frame budget and rejects stale work by stable resource keys
-and assignment revisions.
+Each substantial domain repeats the same pattern: one domain owner connects
+specialised components, while those components do not import one another.
 
-`src/world/wind.ts` provides deterministic global wind samples. Consumers own
-their visual response but do not define competing global wind state.
+Start owns procedural lessons, particle presentation and tutorial atmosphere through
+its local star. It exposes completion, earned-lesson progress and a presentation-presence
+input to Run; it never imports Show or Control. Natural completion requires the
+course exit (or deadline), completed closing voice and white-room presentation.
+The operator may explicitly skip training through Run; that command fades its
+visuals and audio, retires its resources and selects a main Show position.
 
-## World Facts and Content
+For the audience route, Run prepares the main composition and then deactivates it
+while Start is active. Both borrow the same spatial-audio owner. Run fades Start,
+releases its sources, resets the existing flight rig to a terrain-relative arrival,
+reactivates the main composition and starts Show. The renderer, XR session and
+controls survive this transition. Show transport becomes available only afterward.
+Conductor prepares the same optional tutorial and waits for Play. Audience entry
+retains automatic playback. Run exposes playback across tutorial and main Show;
+Pause holds tutorial lesson time, speech and flight without removing resources.
+Stop and the Tutorial chapter restart training through Run, including during a
+handoff. Run rewinds and holds main Show, releases the previous tutorial, and
+constructs a fresh, paused tutorial while keeping renderer, XR, controls and shared
+audio. Play resumes it. Restart failures expose a retryable error and retain those
+shared owners; they do not end the experience.
+Repeated restart requests coalesce while loading; unloading waits for construction
+before releasing borrowed resources. Operator status uses bounded UI polling,
+independent of desktop animation callbacks during immersive XR.
+Both PC and Conductor timelines use shared UI projection and pointer gestures:
+Start is a fixed visual block with earned chunk counts, never a seekable time
+segment. Main positions retain their actual Show seconds. Entry mounts each UI
+once; Show availability changes its observations without rebuilding the bar.
 
-`src/world-surface` is a pure deterministic query boundary. It owns height and
-continuous zone conditions but no scene objects or lifecycle. Content modules
-receive it as a read-only contract.
+## Owners and lifetime
 
-`src/modules` owns the rendered or simulated content. Current categories are:
+- Entry resolves browser/deployment input, starts or cancels one Run, mounts UI,
+  and connects page exit to cleanup.
+- UI owns declared DOM, gestures, display state, listeners, and UI cleanup. It
+  invokes owner commands and reads observations; it defines no experience policy.
+- Show owns one clock, transport, language, narration, and dramaturgy.
+- World owns one renderer, one animation loop, XR, resize, viewpoint publication,
+  module execution, bounded streaming, and renderer disposal.
+- Control owns input mapping and locomotion. The viewer rig separates locomotion
+  from desktop or headset-local pose.
+- Content modules own their CPU/GPU resources and participate in the shared
+  load/activate/update/deactivate/unload lifecycle.
+- Sound owners release their nodes before the owner of a shared audio context
+  closes it.
+- Station serves files, deployment facts, and process health. It owns no Show
+  clock, browser Run, transport command, or visitor state.
 
-- streamed geometry and populations: Terrain, Vegetation, Rocks, Animals,
-  legacy Grass, and Grass Clipmap;
-- point and network systems: Air Particles, Scent Particles, Motion Sense, and
-  Mycelium/Connections;
-- material or presentation effects: Echo Depth, Thermal Perception, World Fade,
-  and the test-only Zone Visualizer;
-- self-contained perception rendering: Magnetic Sense, which owns only its sky
-  dome and does not patch sibling materials.
+The creator of a resource releases it. Run stops live work before releasing
+children and shared sources. Partial startup, cancellation, late asynchronous
+results, handoff, and repeated end calls follow the same ownership path.
 
-Concrete modules do not import siblings. Cross-module information uses narrow
-contracts such as `WorldSurface`, `UnlitMaterialEffect`, `MotionPointSource`,
-`ScentSource`, and `ConnectionNodeSource`; the composition root performs the
-wiring in `src/levels/level-composition.ts`.
+## Configuration and bounded work
 
-## Levels and Show
+Authored application configuration is typed TypeScript. Each level is one
+self-contained literal parameter object with type-only imports, no spreads,
+inheritance, helpers, or hidden override order. JSON under `public/` records
+asset or firmware provenance only.
 
-Files in `src/levels/*.level.ts` are typed startup recipes: each owns its
-presentation values and spreads the sense layers up to its rung, in ladder
-order. The layers live in `src/levels/sense-layers.ts` and are built from the
-authored blocks in `src/levels/authored/`, where every configuration value
-exists once. A level names layers, never another level. `test` and
-`design-test` remain diagnostic presets with values of their own.
+Runtime memory and work remain bounded through fixed capacities, pooling,
+recycling, assignment revisions, and frame-budgeted jobs. There is one renderer,
+one render loop, one Show-time authority, and one Run lifetime per application.
 
-`show-composition.ts` spreads every layer into the complete module and asset
-union the default page creates once. `SHOW_LEVEL_STATES` contains only presentation facts
-that can change while that world is running. `PIECE_SCHEDULE` and the show
-clock select those states, drive sense intensities and background transitions,
-synchronize narration, and fade in the end credits at the authored
-`creditsAtSeconds`. The schedule's opening state is also applied before module
-construction so fixed spatial pools use its authored view distance. A requested
-standalone level or benchmark does not start a show, so neither builds the
-credits panel.
+## Enforcement and migration
 
-`show-runtime.ts` also drives the drone organ in `src/sound/drone-organ/`
-through one per-frame contract: the show time sample, the strength of each
-voice as `organ-score.ts` derives it, the listener pose, ground height, and
-the live bird-flock and fly-swarm centres that Motion Sense reports through
-`ShowWorldReach`. Sound never reads the schedule and keeps no clock: the
-organ's rhythmic voices step on grids of show seconds that the runtime places
-onto audio time each frame. Tone.js arrives through a dynamic import inside
-`drone-organ.ts`, and the organ plays on the context Tone builds for itself —
-see [Architecture Decisions](architecture-decisions.md).
+`.fallowrc.jsonc` must encode this matrix. Split broad zones such as `levels`
+into Run, Composition, Show, presets, and contracts as their issue-backed
+refactors remove current violations. Auto-discovered content and local-domain
+zones must reject sibling imports. Activate each stricter rule in the same
+coherent change that removes its existing violations; do not add baselines or
+suppressions.
 
-## Station and Control Boundaries
-
-The Conductor imports the public level/runtime contracts and commands the show
-through `src/conductor/show-actions.ts`. It reads a snapshot each frame rather
-than holding a second copy of show time.
-
-The M5 boundary treats HTTP payloads as untrusted. `src/m5` parses control
-frames, applies smoothing and safety rules, and exposes a small adapter to the
-composition root. Remaining host-reset, liveness, identity, and calibration
-gaps are tracked issues.
-
-Deployment settings supplied by the Bun server are parsed by
-`src/station/deployment-config.ts`. A configured fact is deployment authority;
-without `/config`, browser pages fail soft to development defaults.
-
-## Configuration and Assets
-
-Authored settings, definitions, and presets are TypeScript. Environment
-variables configure the station process only. JSON under `public/` records
-asset provenance and firmware metadata, not authored runtime configuration.
-
-Static GLTF definitions are loaded before World Runtime starts and passed into
-the modules that own their instanced or cloned resources. Asset provenance is
-recorded under `public/*/manifest.json` and [docs/assets](assets/).
+Fallow is the import-boundary authority. Focused tests may protect public
+capability shapes and meaningful negative examples, but no second dependency
+analyser is introduced. Architectural completion requires zero forbidden
+production imports and a passing intentional-negative boundary probe.

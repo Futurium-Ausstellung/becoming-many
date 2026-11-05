@@ -11,6 +11,7 @@ import { createSnakeGeometry } from "../../src/modules/snakes/snake-geometry";
 import { createSnakesModule } from "../../src/modules/snakes/snakes";
 import { SNAKES_DEFINITION } from "../../src/modules/snakes/snakes-definition";
 import { StreamQueue } from "../../src/world/stream-queue";
+import type { Viewpoint } from "../../src/world/viewpoint";
 import type { WorldSurface } from "../../src/world-surface/world-surface";
 import type { ZoneId } from "../../src/world-surface/zone-settings";
 
@@ -70,7 +71,7 @@ describe("Snakes", () => {
     const scene = new Scene();
     const module = createSnakesModule({
       scene,
-      viewpoint: { worldPosition: new Vector3(), viewDistanceMeters: 64 },
+      viewpoint: createViewpoint(new Vector3()),
       preset: PRESET,
       streamQueue: createTestStreamQueue(),
       worldSurface: createFlatSurface("meadow"),
@@ -85,7 +86,7 @@ describe("Snakes", () => {
     const woodedScene = new Scene();
     const wooded = createSnakesModule({
       scene: woodedScene,
-      viewpoint: { worldPosition: new Vector3(), viewDistanceMeters: 64 },
+      viewpoint: createViewpoint(new Vector3()),
       preset: PRESET,
       streamQueue: createTestStreamQueue(),
       worldSurface: createFlatSurface("coniferForest"),
@@ -100,7 +101,7 @@ describe("Snakes", () => {
     const waterScene = new Scene();
     const overWater = createSnakesModule({
       scene: waterScene,
-      viewpoint: { worldPosition: new Vector3(), viewDistanceMeters: 64 },
+      viewpoint: createViewpoint(new Vector3()),
       preset: PRESET,
       streamQueue: createTestStreamQueue(),
       worldSurface: createFlatSurface("water"),
@@ -118,7 +119,7 @@ describe("Snakes", () => {
     const streamQueue = createTestStreamQueue();
     const module = createSnakesModule({
       scene,
-      viewpoint: { worldPosition: viewerPosition, viewDistanceMeters: 64 },
+      viewpoint: createViewpoint(viewerPosition),
       preset: PRESET,
       streamQueue,
       worldSurface: createFlatSurface("shrubSlope"),
@@ -154,7 +155,7 @@ describe("Snakes", () => {
     const scene = new Scene();
     const module = createSnakesModule({
       scene,
-      viewpoint: { worldPosition: new Vector3(), viewDistanceMeters: 64 },
+      viewpoint: createViewpoint(new Vector3()),
       preset: PRESET,
       streamQueue: createTestStreamQueue(),
       worldSurface: createFlatSurface("meadow"),
@@ -199,4 +200,15 @@ function createFlatSurface(zone: ZoneId): WorldSurface {
       forest: 0,
     }),
   } as unknown as WorldSurface;
+}
+
+function createViewpoint(worldPosition: Vector3): Viewpoint {
+  return {
+    worldPosition,
+    worldBodyDirection: new Vector3(0, 0, -1),
+    worldDirection: new Vector3(0, 0, -1),
+    worldUp: new Vector3(0, 1, 0),
+    viewHalfAngleRadians: Math.PI / 4,
+    viewDistanceMeters: 64,
+  };
 }

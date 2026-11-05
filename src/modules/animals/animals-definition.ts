@@ -6,9 +6,10 @@
  */
 
 import type { ZoneId } from "../../world-surface/zone-settings";
+import type { AnimalSpeciesId } from "../scent-sources";
 
 export interface AnimalSpeciesDefinition {
-  readonly id: string;
+  readonly id: AnimalSpeciesId;
   readonly url: string;
   readonly count: number;
   readonly heightMeters: number;
@@ -52,7 +53,7 @@ export const ANIMALS_DEFINITION: AnimalsDefinition = {
   species: [
     {
       id: "deer",
-      url: "/animals/deer.glb",
+      url: "/models/animals/deer.glb",
       count: 5,
       heightMeters: 1.4,
       speedMetersPerSecond: 0.65,
@@ -61,7 +62,7 @@ export const ANIMALS_DEFINITION: AnimalsDefinition = {
     },
     {
       id: "stag",
-      url: "/animals/stag.glb",
+      url: "/models/animals/stag.glb",
       count: 3,
       heightMeters: 1.6,
       speedMetersPerSecond: 0.605,
@@ -70,7 +71,7 @@ export const ANIMALS_DEFINITION: AnimalsDefinition = {
     },
     {
       id: "fox",
-      url: "/animals/fox.glb",
+      url: "/models/animals/fox.glb",
       count: 6,
       heightMeters: 0.7,
       speedMetersPerSecond: 0.79,
@@ -79,7 +80,7 @@ export const ANIMALS_DEFINITION: AnimalsDefinition = {
     },
     {
       id: "rat",
-      url: "/animals/rat.glb",
+      url: "/models/animals/rat.glb",
       count: 6,
       heightMeters: 0.25,
       speedMetersPerSecond: 0.325,

@@ -20,6 +20,7 @@ import {
   type UnlitMaterialEffect,
 } from "../../utils/asset-loader/material-effect";
 import { applyShaderPatch } from "../../utils/asset-loader/material-shader-patch";
+import { isNormalized } from "../../utils/number-ranges";
 import {
   type ChunkCandidate,
   type ChunkCandidateGrid,
@@ -34,7 +35,7 @@ import {
 } from "../../world/chunk-system";
 import type { WorldModule } from "../../world/module-runtime";
 import type { StreamJob, StreamQueue } from "../../world/stream-queue";
-import type { Viewpoint } from "../../world/viewer-rig";
+import type { Viewpoint } from "../../world/viewpoint";
 import type { WorldSurface } from "../../world-surface/world-surface";
 import { createSnakeGeometry } from "./snake-geometry";
 import slitherShader from "./snake-slither.vert.glsl?raw";
@@ -122,6 +123,9 @@ interface SnakesState {
  * pool of them is one draw call.
  */
 export function createSnakesModule(options: SnakesModuleOptions): WorldModule {
+  if (!isNormalized(options.preset.crawlingShare)) {
+    throw new RangeError("Snake crawling share must be between zero and one");
+  }
   const state: SnakesState = { currentStream: undefined, elapsedSeconds: 0 };
 
   return {

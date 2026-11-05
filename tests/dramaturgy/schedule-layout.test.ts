@@ -9,7 +9,11 @@ import { describe, expect, test } from "bun:test";
 import { NARRATION_CUES } from "../../src/dramaturgy/narration-catalog";
 import type { NarrationSchedule } from "../../src/dramaturgy/narration-schedule";
 import { PIECE_SCHEDULE } from "../../src/dramaturgy/piece-schedule";
-import { cueSlots, nextCueAt } from "../../src/dramaturgy/schedule-layout";
+import {
+  cueSlots,
+  nextCueAt,
+  timelineChapters,
+} from "../../src/dramaturgy/schedule-layout";
 
 const SCHEDULE: NarrationSchedule = {
   durationSeconds: 200,
@@ -92,5 +96,22 @@ describe("nextCueAt", () => {
     };
 
     expect(nextCueAt(late, 0)?.atSeconds).toBe(10);
+  });
+});
+
+describe("timelineChapters", () => {
+  test("includes silent pre-roll in the first chapter", () => {
+    const schedule: NarrationSchedule = {
+      durationSeconds: 200,
+      narration: [
+        { cueId: "prologue", atSeconds: 5, level: "white-world" },
+        { cueId: "echo", atSeconds: 100, level: "echo" },
+      ],
+    };
+    expect(timelineChapters(schedule)).toEqual([
+      { cueId: "prologue", startSeconds: 0, endSeconds: 100 },
+      { cueId: "echo", startSeconds: 100, endSeconds: 200 },
+    ]);
+    expect(schedule.narration[0]?.atSeconds).toBe(5);
   });
 });

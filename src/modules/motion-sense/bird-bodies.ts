@@ -18,7 +18,7 @@ import {
   type Scene,
   Vector3,
 } from "three";
-import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
+import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
 import type { UnlitMaterialEffect } from "../../utils/asset-loader/material-effect";
 import { applyMaterialEffects } from "../../utils/asset-loader/material-effect";
 import { applyShaderPatch } from "../../utils/asset-loader/material-shader-patch";
@@ -37,7 +37,7 @@ const WING_BEAT_CACHE_KEY = "bird-wing-beat-v1";
  */
 export const BIRD_BODY_ASSET = {
   id: "bird",
-  url: "/birds/bird.glb",
+  url: "/models/animals/flock-bird.glb",
 } as const;
 const UP = new Vector3(0, 1, 0);
 
@@ -70,7 +70,13 @@ interface BirdBodyResources {
  */
 export function createBirdBodies(options: BirdBodiesOptions): BirdBodies {
   const geometry = readBirdGeometry(options.asset, options.appearance);
-  const material = createBirdMaterial(options);
+  let material: MeshBasicMaterial;
+  try {
+    material = createBirdMaterial(options);
+  } catch (error) {
+    geometry.dispose();
+    throw error;
+  }
   const mesh = new InstancedMesh(geometry, material, options.birdCount);
   mesh.name = "BirdBodies";
   mesh.instanceMatrix.setUsage(DynamicDrawUsage);

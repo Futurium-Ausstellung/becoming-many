@@ -6,6 +6,7 @@
  */
 
 import type { Scene } from "three";
+import type { TerrainMaterialEffect } from "../../utils/asset-loader/material-effect";
 import {
   type ChunkAssignment,
   ChunkWindow,
@@ -17,7 +18,7 @@ import {
   type StreamQueue,
   SURFACE_STREAM_PRIORITY,
 } from "../../world/stream-queue";
-import type { Viewpoint } from "../../world/viewer-rig";
+import type { Viewpoint } from "../../world/viewpoint";
 import type { WorldSurface } from "../../world-surface/world-surface";
 import {
   createTerrainChunkWriter,
@@ -25,7 +26,6 @@ import {
   disposeTerrainGeometry,
   initializeTerrainChunks,
   type TerrainGeometry,
-  type TerrainMaterialEffect,
   type TerrainPresentation,
   writeNextTerrainRow,
 } from "./terrain-geometry";
@@ -76,6 +76,7 @@ export function createTerrainModule(
 
 function loadTerrain(state: TerrainState, options: TerrainModuleOptions): void {
   const stream = createTerrainStream(options);
+  state.currentStream = stream;
   const initialAssignments = stream.chunkWindow.update(
     options.viewpoint.worldPosition.x,
     options.viewpoint.worldPosition.z,
@@ -84,7 +85,6 @@ function loadTerrain(state: TerrainState, options: TerrainModuleOptions): void {
   initializeTerrainChunks(stream.geometry, initialAssignments);
   stream.geometry.group.visible = false;
   options.scene.add(stream.geometry.group);
-  state.currentStream = stream;
 }
 
 function updateTerrain(

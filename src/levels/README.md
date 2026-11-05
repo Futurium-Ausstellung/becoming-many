@@ -2,71 +2,76 @@
 Purpose: Document ownership of typed level presets and their composition root.
 Context: Narrative states layer inside one running show composition.
 Responsibility: Explain what belongs in src/levels and how entries select it.
-Boundary: Runtime mechanisms and concrete content implementations live elsewhere.
+Boundary: Browser presentation and concrete content implementations live elsewhere.
 -->
 
 # Levels
 
-This folder owns the authored configuration blocks, the sense layers built from
-them, the typed standalone level presets, the preloaded show composition,
-concrete world construction, and the runtime that turns either request into one
-running world.
+This folder owns typed level configuration, concrete world construction and the
+existing runtime that turns a static or show request into one world.
 
-Every `*.level.ts` exports one data-only `LevelPreset`: its own presentation
-values followed by the sense layers it carries, spread in ladder order. Omitted
-layers are intentionally off. The narrative names remain ordered as:
+Each level is one self-contained literal parameter object, following
+`diagnostic.level.ts`: only type imports, no imported values, helpers, calls, spreads
+or inheritance. All authored settings can be read and changed in that file.
+Repeated configuration is intentional; `authored/` is retired. Required fields
+are typed; technical defaults and validation belong to the concrete module.
+See the [binding architecture](../../docs/architecture.md).
+
+Narrative names remain ordered as:
 
 ```text
 white-world → scent → echo → motion → thermal → magnetic → connections
 ```
 
-`authored/` holds each configuration block exactly once, typed against the
-module contract it configures. `sense-layers.ts` groups those blocks into one
-layer per sense. A level names layers, never another level, so the ordering is
-the experience and not code inheritance — and a retune of a sense is one edit
-that reaches every level carrying it. Layers only add keys, with one named
-exception: the thermal layer carries `HEAT_MOTION_SENSE`, the motion sense with
-its bird trail repainted, defined beside the base value it deviates from.
-Scent's invisible plants take their placement from `authored/vegetation.ts`,
-so a trail a traveler follows in Scent rises where Echo later shows a plant.
-
-`test.level.ts` and `designTest.level.ts` are diagnostic/integration presets,
-not narrative states. The Test preset still uses the older Grass module and
-the browser Test UI.
+`diagnostic.level.ts` and `visual-integration.level.ts` are diagnostic/integration presets,
+not narrative states. The Diagnostic preset uses Grass Clipmap.
 
 ## Catalog and Entries
 
-`level-catalog.ts` names only standalone presets. `show-composition.ts` owns the
-separate construction-only `ShowComposition` loaded once for the complete
-show, and names the animal passages that cross it beside its sense layers — a
-passage is placed on the timeline rather than carried by a sense, so it sits
-next to `world` and not inside it. Without that entry no passage model or route
-is loaded at all, which is why a standalone preset costs nothing for them. `show-levels.ts` owns the narrow presentation states the running show can
-change. The bare `src/main.ts` route starts that show; `?level=<name>` and
-matching path names enter through `src/test-main.ts` and select one showless
-development preset. Benchmarks use that Test entry too.
+`level-catalog.ts` names the original level recipes for standalone runs and Show. The Show uses the Connections
+preset for its once-prepared world; changing these module parameters affects both
+runs. `show-levels.ts` reads presentation values and sense targets directly from those
+same recipes. It owns transition calculations, not another configuration table. The bare `src/entry/rehearsal.entry.ts` route starts that show; `?level=<name>` and
+matching path names enter through `src/entry/standalone-level.entry.ts` and select one
+development preset. Standalone presets remain showless.
+
+The Show request also names the animal passages that cross it
+(`ShowRequest.passages`, set by the entries from `PIECE_PASSAGES`). A passage is
+placed on the timeline rather than carried by a sense, so it sits beside the
+level states and not inside a recipe. Without that entry no passage model or
+route is loaded, which is why standalone presets cost nothing for them.
 
 An unknown requested name warns and falls back to Connections. That fallback is
 for explicit development selection, not the behavior of the bare show route.
 
 ## Runtime and Composition
 
-`level-preset.ts` owns the data contracts. `level-runtime.ts` owns startup and
+`level-preset.ts` owns the data contracts. `level.runtime.ts` owns startup and
 frame coordination. It:
 
-- starts the permanent World Runtime;
+- creates the stopped World Runtime after loading required assets;
 - applies the initial static or show presentation before module loading;
 - loads and activates the configured module list;
-- connects the selected desktop or M5 flight source;
-- accepts entry-owned Test UI metrics and overlay creation only when requested;
+- awaits World-owned shader compilation and first-use uploads for a show;
+- connects ordered M5 and desktop sources to the shared two-axis contract;
+- asks the one global flight model to apply continuous thrust and combined tilt
+  on each live frame, for Start, standalone levels, and the complete Show;
 - delegates optional show time, narration, transitions, sense fades, and the
-  drone organ's per-frame contract to `show-runtime.ts`;
-- returns the narrow `RunningLevel` command/query surface used by pages.
+  drone organ's per-frame contract to `show.runtime.ts`;
+- starts the World loop only after preparation and returns the narrow
+  `Run` command/query surface currently used by pages.
+
+Its local frame handles live input, Show updates and
+height limits in order. Run supplies the active flight speed and limits, while
+Composition only wires sources. World then publishes the resulting rig and eye
+facts, updates modules and streaming, and renders.
+Flight reset restores rig orientation/position;
+the complete fresh-visitor operation remains a separate gate.
 
 `level-composition.ts` loads the required GLTF assets, creates the shared World
 Surface, constructs the concrete modules, orders material effects, and wires
-neutral provider contracts. It returns only the surface, module list, ground
-presence, and `ShowWorldReach` needed by the runtime.
+neutral provider contracts. It returns the surface, module list, ground presence,
+and `ShowWorldReach`. A Show prepares and activates its main composition once.
 
 Preset files create no resources and import no module implementation. Concrete
 modules do not import siblings; Level Composition performs cross-boundary
@@ -74,10 +79,48 @@ wiring.
 
 During a show, the schedule selects a `ShowLevelState` and drives module
 standing, sense intensity, background blending, and World Fade without
-recreating the composition. Standing is the wider of the two: a gated module is
-warmed one prewarm window before the sense that reveals it — running, following
-the viewer, and drawn by nothing — so what the fade raises is already built.
-Static `LevelPreset` objects are not read by the show. The opening show state is
-applied before modules size fixed spatial windows; later states remain driven by
-the same schedule and state map. Flight remains constrained against the shared
-surface through White World and every transition.
+recreating the composition or rereading the construction preset. Standing is
+wider than strength: a gated module is warmed `SENSE_PREWARM_SECONDS` before the
+sense that reveals it — running, following the viewer, and drawn by nothing — so
+what the fade raises is already built. A seek straight into a cue gets no
+warming. The opening
+show state is applied before modules size fixed spatial
+windows; later states remain driven by the same schedule and state map. Flight
+remains constrained against the shared surface through White World and every
+transition.
+
+## UI boundary and resources
+
+Run owns experience startup, transport, frame coordination and complete end;
+Show owns main playback and language. Run exposes `readLanguage` and
+`setLanguage` independently of the main Show handle, which remains unavailable
+during training. Browser Entry chooses requests and connects a Run to
+UI. Page/panel code receives narrow public capabilities under the
+[Development guide](../../docs/development.md).
+
+Run owns loaded GLTF sources until all borrowers finish. Composition constructs
+and connects; World coordinates module lifecycle; modules release their own
+derivatives. UI releases only its own presentation resources. The existing
+`unload()` path is implemented; full next-visitor operation remains #9/#46.
+
+## Tutorial entry and handoff
+
+The audience routes `/`, `/start`, `/tutorial` and `/?level=start` prepare the
+main show and run `start.level.ts` first. `LevelRun` waits for the complete
+closing narration and final route exit, fades Start, disposes its voice and
+atmosphere, resets the existing rig with eight meters of terrain clearance, and
+starts the main Show at zero. `handoff-settings.ts` owns these transition values.
+The same renderer, listener and XR session remain active throughout.
+
+Start exposes completion and presentation presence through its public contract.
+Composition connects resources; Run owns the handoff. Main modules stay inactive
+during the tutorial. Entry mounts transport once; `subscribeShow` reports main
+Show availability without remounting UI. Conductor prepares the same tutorial
+but waits for Play; audience entry starts automatically.
+
+Language changes update Show and refresh Start's current recording through its
+injected language query. They never invoke the restart path. Start retains the
+initial course and cue timeline while Sound replaces native speech. A tutorial
+constructed by Stop reads the current language, including changes made while
+its assets load. `ShowLevelRequest` carries language only in `show.language`;
+the separate `StaticLevelRequest.language` selects a fixed standalone language.

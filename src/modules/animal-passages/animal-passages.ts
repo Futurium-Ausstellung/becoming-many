@@ -26,7 +26,7 @@ import {
 } from "../../utils/asset-loader/gltf-assets";
 import { createUnlitMaterial } from "../../utils/asset-loader/unlit-material";
 import type { WorldModule } from "../../world/module-runtime";
-import type { Viewpoint } from "../../world/viewer-rig";
+import type { Viewpoint } from "../../world/viewpoint";
 import type { WorldSurface } from "../../world-surface/world-surface";
 import type {
   PassageSwarmCrossing,
@@ -85,17 +85,19 @@ export interface AnimalPassagesModuleHandle {
  */
 export async function loadPassageResources(
   schedule: PassageSchedule,
+  signal?: AbortSignal,
 ): Promise<PassageResources> {
   const definitions = scheduledFlights(schedule);
   const swarmScheduled = isSwarmScheduled(schedule);
-  const [models, routes, swarmRoute] = await Promise.all([
+  const [models, routes, swarmRoute] = await Promise.allSettled([
     loadGltfAssets(
       definitions.map(({ passageId, modelUrl }) => ({
         id: passageId,
         url: modelUrl,
       })),
+      signal,
     ),
-    Promise.all(
+    Promise.allSettled(
       definitions.map(
         async (definition) =>
           [
@@ -111,7 +113,16 @@ export async function loadPassageResources(
             ),
           ] as const,
       ),
-    ),
+    ).then((results) => {
+      const errors = results.flatMap((result) =>
+        result.status === "rejected" ? [result.reason] : [],
+      );
+      if (errors.length)
+        throw new AggregateError(errors, "Passage routes failed to load");
+      return results.flatMap((result) =>
+        result.status === "fulfilled" ? [result.value] : [],
+      );
+    }),
     swarmScheduled
       ? loadPassageRoute(
           MOSQUITO_PASSAGE.routeUrl,
@@ -126,9 +137,31 @@ export async function loadPassageResources(
       : undefined,
   ]);
 
-  const loaded = new Map(routes);
-  if (swarmRoute) loaded.set(MOSQUITO_PASSAGE.passageId, swarmRoute);
-  return { models, routes: loaded };
+  if (
+    models.status === "rejected" ||
+    routes.status === "rejected" ||
+    swarmRoute.status === "rejected" ||
+    signal?.aborted
+  ) {
+    const errors: unknown[] = [
+      ...[models, routes, swarmRoute].flatMap((result) =>
+        result.status === "rejected" ? [result.reason] : [],
+      ),
+      ...(signal?.aborted ? [signal.reason] : []),
+    ];
+    try {
+      if (models.status === "fulfilled") disposeGltfAssets(models.value);
+    } catch (error) {
+      errors.push(error);
+    }
+    if (signal?.aborted && errors.every((error) => error === signal.reason))
+      throw signal.reason;
+    throw new AggregateError(errors, "Passage resources failed to load");
+  }
+  const loaded = new Map(routes.value);
+  if (swarmRoute.value)
+    loaded.set(MOSQUITO_PASSAGE.passageId, swarmRoute.value);
+  return { models: models.value, routes: loaded };
 }
 
 export function createAnimalPassagesModule(
@@ -267,7 +300,6 @@ function unstagePassages(
     passage.flight.dispose();
   }
   staged.length = 0;
-  disposeGltfAssets(options.resources.models);
 }
 
 /**

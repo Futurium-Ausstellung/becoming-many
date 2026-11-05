@@ -1,32 +1,26 @@
 # Control
 
-This folder contains input, navigation, and operator-control logic.
+One flight model receives `forwardTilt` and `rightTilt` in −1..1. Composition
+connects the desktop and M5 sources; Flight Control reads each once per frame,
+adds their axes, and clamps the result. Mouse or head pose never steers.
 
-`desktop-controls.ts` provides the desktop adapter: click the canvas to capture
-the mouse, look around with the mouse, fly in the viewing direction with WASD
-or the arrow keys, and press Escape to release the pointer.
+- `desktop-controller.ts` owns pointer lock, local mouse look and held keys.
+  W/↑ tilts forward, S/↓ backward, A/← left and D/→ right. Keys emulate a body
+  moving toward the selected tilt: neutral to full takes half a second, holding
+  stays at the limit, and release or reversal moves continuously. This is the
+  only keyboard response state. Aliases share directions; opposing keys target
+  neutral. Blur, pointer-lock loss and unload clear keys and emulated tilt.
+- The M5 runtime reports fresh physical tilt directly. Firmware owns calibration;
+  the browser retains only transport lifetime and freshness checks.
+- `flight-control.ts` sets body pitch and bank, each limited to 45 degrees.
+  Banking turns the heading. The rig travels forward at constant path speed;
+  neutral tilt flies level. The rig's existing quaternion owns heading, so reset
+  needs no second orientation state.
+- `flight-pose.ts` owns reset and terrain clearance calculations. Run chooses
+  when to reset and which height limits apply.
 
-`flight-settings.ts` is the typed base configuration for ICAROS speed, climb,
-yaw, neutral descent bias, minimum ground clearance, and upward view
-assistance. `flight-ground-clearance.ts` constrains altitude relative to the
-deterministic ground: the shared minimum applies where a level exposes a world
-surface, while each level authors its own optional maximum.
-
-`m5-flight.ts` applies an M5 ControlFrame as ICAROS glider flight: constant
-forward glide, roll yaws the heading about world-up (the horizon never banks),
-and pitch climbs or descends around the configured downward bias. It runs every
-frame while an M5 host is configured — a quality-0 frame is neutral steering,
-so a dropped poll continues the glide and gentle descent. Keyboard movement
-returns when the host is cleared; the frames come from `src/m5`.
-
-`flight-control-source.ts` owns the one runtime choice between those adapters:
-an available M5 frame has exclusive control for that frame; otherwise desktop
-input updates the same viewer rig.
-
-`flight-reset.ts` returns the flight rig to the pose a level starts from, which
-the in-process conductor page reaches through `RunningLevel`. Reset and height limits stay
-effective in immersive VR because they move the rig, not the headset-owned
-camera pose.
-
-Control code must not own content modules, world rendering, or its own frame
-loop.
+The desktop camera inherits the body's pitch and bank and adds independent
+mouse look. In XR, Control rotates the rig only around the vertical axis;
+physical headset tracking supplies body tilt, with World's prone-posture
+assistance. World publishes observations and never derives a steering pose from
+movement. Benchmarks keep their authored camera poses.

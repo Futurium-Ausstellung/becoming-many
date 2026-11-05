@@ -1,15 +1,12 @@
 /**
  * Purpose: Define the authored contracts used to construct standalone levels and shows.
- * Context: Static presets, show composition, and live show state have different lifecycles.
+ * Context: One preset constructs the world; live show state controls its presentation.
  * Responsibility: Describe presentation and immutable world-construction data without runtime ownership.
  * Boundary: This file contains types only and creates no browser or Three.js resources.
  */
 
-import type { PassageSchedule } from "../dramaturgy/passage-schedule";
-import type { AirParticlesParameters } from "../modules/air-particles/air-particles";
 import type { AnimalsPreset } from "../modules/animals/animals";
 import type { EchoDepthParameters } from "../modules/echo-depth/echo-depth";
-import type { GrassPreset } from "../modules/grass/grass";
 import type { GrassClipmapPreset } from "../modules/grass-clipmap/grass-clipmap";
 import type { MagneticSenseParameters } from "../modules/magnetic-sense/magnetic-sense";
 import type { MotionSenseParameters } from "../modules/motion-sense/motion-sense";
@@ -17,6 +14,8 @@ import type { ConnectionsParameters } from "../modules/mycelium/mycelium";
 import type { RocksPreset } from "../modules/rocks/rocks";
 import type { ScentParticlesParameters } from "../modules/scent-particles/scent-particles";
 import type { SnakesPreset } from "../modules/snakes/snakes";
+import type { FlightGuidanceParameters } from "../modules/start/flight-guidance";
+import type { AirParticlesParameters } from "../modules/start/point-cloud/point-cloud.module";
 import type { StaticPopulationPreset } from "../modules/static-population";
 import type { TerrainColors } from "../modules/terrain/terrain-colors";
 import type { ThermalPerceptionParameters } from "../modules/thermal-perception/thermal-perception";
@@ -29,43 +28,39 @@ export interface TerrainPreset {
 }
 
 /** Immutable module and asset choices used to construct one world. */
-export interface WorldComposition {
+export type WorldComposition = {
   readonly invisibleGround?: true;
-  readonly invisibleVegetation?: StaticPopulationPreset;
   readonly airParticles?: AirParticlesParameters;
+  readonly flightGuidance?: FlightGuidanceParameters;
   readonly scentParticles?: ScentParticlesParameters;
   readonly terrain?: TerrainPreset;
-  readonly grass?: GrassPreset;
   readonly grassClipmap?: GrassClipmapPreset;
-  readonly vegetation?: VegetationPreset;
   readonly rocks?: RocksPreset;
-  readonly snakes?: SnakesPreset;
   readonly animals?: AnimalsPreset;
+  readonly snakes?: SnakesPreset;
   readonly echoDepth?: EchoDepthParameters;
   readonly motion?: MotionSenseParameters;
   readonly thermal?: ThermalPerceptionParameters;
   readonly magnetic?: MagneticSenseParameters;
   readonly connections?: ConnectionsParameters;
-}
+} & (
+  | {
+      readonly vegetation?: VegetationPreset;
+      readonly invisibleVegetation?: never;
+    }
+  | {
+      readonly vegetation?: never;
+      readonly invisibleVegetation?: StaticPopulationPreset;
+    }
+);
 
-/** A complete standalone startup recipe used by development routes and benchmarks. */
-export interface LevelPreset extends WorldComposition {
+/** A complete world recipe used by standalone routes, benchmarks and the Show. */
+export type LevelPreset = WorldComposition & {
+  /** Optional standalone translation speed in meters per second. */
+  readonly flightSpeedMetersPerSecond?: number;
   readonly backgroundColor: number;
   readonly viewDistance: number;
-  readonly testUi?: true;
+  /** Vertical desktop view angle; immersive XR retains the headset projection. */
+  readonly desktopFieldOfViewDegrees?: number;
   readonly maximumGroundClearanceMeters: number;
-}
-
-/** The construction-only world preloaded once for a running show. */
-export interface ShowComposition {
-  readonly world: WorldComposition;
-  /** Haze baked into surface and sky materials before live state following. */
-  readonly materialHazeColor: number;
-  /**
-   * The animals that cross this show, and when. Absent means none cross, and
-   * then no passage model or route is loaded at all. It sits beside `world`
-   * rather than inside it because a passage is placed on the timeline, not
-   * carried by a sense: the schedule is what says an animal is in the air.
-   */
-  readonly passages?: PassageSchedule;
-}
+};

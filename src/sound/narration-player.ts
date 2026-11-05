@@ -5,164 +5,313 @@
  * Boundary: Show time and cue selection are decided before this is called.
  */
 
-import {
-  type NarrationCueId,
-  type NarrationLanguage,
-  narrationDurationSeconds,
-  narrationUrl,
-} from "../dramaturgy/narration-catalog";
-import type { NarrationCuePosition } from "../dramaturgy/narration-schedule";
-
 // How far playback may sit from the show before it is pulled back. A re-seek
 // is audible, so raise this before lowering it. Unmeasured on the PICO.
 const SYNC_TOLERANCE_SECONDS = 0.25;
+const REPLACEMENT_SEEK_LIMIT = 2;
 
-/** One sampled show instant, as the narration needs to see it. */
-export interface NarrationFollowState {
-  /** Undefined in a gap, before the first cue, and after the show ends. */
-  readonly position: NarrationCuePosition | undefined;
-  readonly isPlaying: boolean;
-  /** Mirrored onto playback rate, or the correction would fight the clock. */
-  readonly timeScale: number;
+import type {
+  NarrationFollowState,
+  NarrationPlayer,
+  NarrationRecording,
+} from "./playback";
+
+interface PreparedNarration {
+  readonly element: HTMLAudioElement;
+  readonly url: string;
+  durationSeconds: number;
+  /** Last requested native seek, retained only during Hold (getters may round). */
+  heldSeekSeconds?: number;
+  /** At most one pending/rejected play attempt until a new transport/cue intent. */
+  playAttempt?: Promise<void>;
+  playbackFailed?: boolean;
+  requestedOffsetSeconds?: number;
+  pendingStartSeconds?: number;
+  /** Initial position and one final alignment; slow seeks must still converge. */
+  replacementSeeks?: number;
 }
 
-export interface NarrationPlayer {
-  readonly follow: (state: NarrationFollowState) => void;
-  readonly unload: () => void;
-}
-
-export interface NarrationPlayerOptions {
-  readonly language: NarrationLanguage;
-  /** Only these recordings are fetched; one fixed element each. */
-  readonly cueIds: readonly NarrationCueId[];
-}
-
-export function createNarrationPlayer({
-  language,
-  cueIds,
-}: NarrationPlayerOptions): NarrationPlayer {
-  const elements = new Map<NarrationCueId, HTMLAudioElement>();
-  for (const cueId of cueIds) {
-    elements.set(cueId, createCueElement(cueId, language));
+/** Own the prepared clips and play only the cue selected by Show. */
+export function createNarrationPlayer(options: {
+  readonly recordings: readonly NarrationRecording[];
+}): NarrationPlayer {
+  const clips = new Map<string, PreparedNarration>();
+  let activeCueId: string | undefined;
+  let activeClip: PreparedNarration | undefined;
+  let isUnloaded = false;
+  function unload(): void {
+    isUnloaded = true;
+    const errors: unknown[] = [];
+    for (const clip of new Set([...clips.values(), activeClip])) {
+      if (!clip) continue;
+      try {
+        releaseClip(clip);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    clips.clear();
+    activeClip = undefined;
+    if (errors.length)
+      throw new AggregateError(errors, "Narration cleanup failed");
   }
+  function setRecordings(recordings: readonly NarrationRecording[]): void {
+    if (isUnloaded) return;
+    try {
+      for (const [cueId, clip] of clips) {
+        if (
+          recordings.some(
+            (recording) =>
+              recording.cueId === cueId && recording.url === clip.url,
+          )
+        )
+          continue;
+        if (clip !== activeClip) releaseClip(clip);
+        clips.delete(cueId);
+      }
+      for (const recording of recordings) {
+        const existing =
+          clips.get(recording.cueId) ??
+          (activeCueId === recording.cueId && activeClip?.url === recording.url
+            ? activeClip
+            : undefined);
+        if (existing) {
+          existing.durationSeconds = recording.durationSeconds;
+          clips.set(recording.cueId, existing);
+          continue;
+        }
+        const element = new Audio(recording.url);
+        element.preload = "auto";
+        clips.set(recording.cueId, {
+          element,
+          url: recording.url,
+          durationSeconds: recording.durationSeconds,
+        });
+      }
+    } catch (error) {
+      try {
+        unload();
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          "Narration preparation failed",
+        );
+      }
+      throw error;
+    }
+  }
+  setRecordings(options.recordings);
 
-  let activeCueId: NarrationCueId | undefined;
   let hasReportedBlockedPlayback = false;
 
   function stopActiveCue(): void {
     if (activeCueId === undefined) return;
-
-    elements.get(activeCueId)?.pause();
+    const candidate = clips.get(activeCueId);
+    if (candidate && candidate !== activeClip) stopClip(candidate);
+    if (activeClip) {
+      stopClip(activeClip);
+      if (candidate !== activeClip) releaseClip(activeClip);
+    }
+    activeClip = undefined;
     activeCueId = undefined;
   }
 
+  function stopClip(clip: PreparedNarration): void {
+    clip.playAttempt = undefined;
+    clip.heldSeekSeconds = undefined;
+    clip.requestedOffsetSeconds = undefined;
+    clip.pendingStartSeconds = undefined;
+    clip.replacementSeeks = undefined;
+    clip.playbackFailed = false;
+    clip.element.pause();
+  }
+
+  function releaseClip(clip: PreparedNarration): void {
+    clip.playAttempt = undefined;
+    clip.element.pause();
+    clip.element.removeAttribute("src");
+    clip.element.load();
+  }
+
   function reportBlockedPlayback(): void {
-    if (hasReportedBlockedPlayback) return;
+    if (isUnloaded || hasReportedBlockedPlayback) return;
 
     hasReportedBlockedPlayback = true;
-    console.warn("Narration stays blocked until the page receives a gesture.");
+    console.warn("Narration playback failed; use Pause then Play to retry.");
   }
 
   return {
-    follow({ position, isPlaying, timeScale }): void {
+    readHasEnded(cueId): boolean {
+      const clip = activeCueId === cueId ? activeClip : clips.get(cueId);
+      return Boolean(
+        !clip ||
+          clip.element.ended ||
+          clip.element.error ||
+          clip.playbackFailed,
+      );
+    },
+    readOffsetSeconds(cueId) {
+      return !isUnloaded && activeCueId === cueId
+        ? activeClip?.element.currentTime
+        : undefined;
+    },
+    readIsPlaying(): boolean {
+      const element = activeClip?.element;
+      return Boolean(
+        !isUnloaded &&
+          element &&
+          !element.paused &&
+          !element.ended &&
+          element.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA,
+      );
+    },
+    follow(state): void {
+      const { position, isPlaying, preserveNaturalEnd = false } = state;
       // A slot is sized for the longer language, so the shorter recording runs
       // out before its slot does; past that end there is simply silence.
       // Without this the drift correction would seek past the end forever.
-      if (!position || hasPlayedOut(position, language)) {
+      if (isUnloaded) return;
+      const clip = position ? clips.get(position.cueId) : undefined;
+      if (
+        !position ||
+        !clip ||
+        (!preserveNaturalEnd && position.offsetSeconds >= clip.durationSeconds)
+      ) {
         stopActiveCue();
         return;
       }
-
-      const element = elements.get(position.cueId);
-      if (!element) return;
 
       const isNewCue = position.cueId !== activeCueId;
       if (isNewCue) {
         stopActiveCue();
         activeCueId = position.cueId;
+        activeClip = clip;
+        clip.element.muted = false;
       }
-
-      matchRecording(element, {
-        offsetSeconds: position.offsetSeconds,
-        isNewCue,
-        isPlaying,
-        timeScale,
-        onBlocked: reportBlockedPlayback,
-      });
+      if (activeClip && activeClip !== clip) {
+        followClip(activeClip, state, false);
+        clip.element.muted = true;
+      }
+      followClip(clip, state, isNewCue);
+      promoteReplacement(clip, isPlaying);
     },
 
-    unload(): void {
-      for (const element of elements.values()) {
-        element.pause();
-        element.removeAttribute("src");
-        element.load();
-      }
-      elements.clear();
-      activeCueId = undefined;
-    },
+    setRecordings,
+    unload,
   };
-}
 
-interface RecordingMatch {
-  readonly offsetSeconds: number;
-  /** A fresh cue is always seeked; only a continuing one may be left alone. */
-  readonly isNewCue: boolean;
-  readonly isPlaying: boolean;
-  readonly timeScale: number;
-  readonly onBlocked: () => void;
-}
-
-/** Bring one recording in line with the instant the show is at. */
-function matchRecording(
-  element: HTMLAudioElement,
-  { offsetSeconds, isNewCue, isPlaying, timeScale, onBlocked }: RecordingMatch,
-): void {
-  // Mirroring the rate matters: at twice speed an unchanged element would fall
-  // behind the clock every frame and stutter under constant correction.
-  element.playbackRate = timeScale;
-
-  // Parking a paused element still moves its playhead, so scrubbing while
-  // stopped resumes at the word it was scrubbed to.
-  if (isNewCue || !isPlaying || isDrifting(element, offsetSeconds)) {
-    seekTo(element, offsetSeconds);
+  function promoteReplacement(
+    clip: PreparedNarration,
+    isPlaying: boolean,
+  ): void {
+    if (
+      activeClip === clip ||
+      clip.element.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+      clip.element.seeking ||
+      clip.element.error ||
+      clip.playbackFailed ||
+      (isPlaying && (clip.element.paused || clip.playAttempt))
+    )
+      return;
+    if (activeClip) releaseClip(activeClip);
+    activeClip = clip;
+    clip.replacementSeeks = undefined;
+    clip.element.muted = false;
   }
 
-  if (!isPlaying) {
-    if (!element.paused) element.pause();
-    return;
+  /** Follow the same Show instant for both sources until the replacement can take over. */
+  function followClip(
+    clip: PreparedNarration,
+    state: NarrationFollowState,
+    isNewCue: boolean,
+  ): void {
+    const { position, timeScale, preserveNaturalEnd = false } = state;
+    if (!position) return;
+    const { offsetSeconds } = position;
+    const { element } = clip;
+    if (!preserveNaturalEnd && offsetSeconds >= clip.durationSeconds) {
+      if (!element.paused || clip.playAttempt) stopClip(clip);
+      return;
+    }
+    const restarting =
+      preserveNaturalEnd &&
+      clip.requestedOffsetSeconds !== undefined &&
+      offsetSeconds + SYNC_TOLERANCE_SECONDS < clip.requestedOffsetSeconds;
+    clip.requestedOffsetSeconds = offsetSeconds;
+    if (preserveNaturalEnd && (isNewCue || restarting))
+      clip.pendingStartSeconds = offsetSeconds;
+    if (preserveNaturalEnd && element.ended && !isNewCue && !restarting) return;
+    if (element.playbackRate !== timeScale) element.playbackRate = timeScale;
+    followPosition(clip, state, isNewCue || restarting);
+    followPlayback(clip, state.isPlaying);
   }
-  if (element.paused) void element.play().catch(onBlocked);
-}
 
-function createCueElement(
-  cueId: NarrationCueId,
-  language: NarrationLanguage,
-): HTMLAudioElement {
-  const element = new Audio(narrationUrl(cueId, language));
-  // Buffering the session's own language up front — about 7.4 MB across eight
-  // recordings — keeps a seek into any of them instant, which is the point of
-  // scrubbing. The element streams; it is never decoded to PCM.
-  element.preload = "auto";
+  function followPosition(
+    clip: PreparedNarration,
+    { position, isPlaying, preserveNaturalEnd = false }: NarrationFollowState,
+    restarting: boolean,
+  ): void {
+    if (!position) return;
+    const { offsetSeconds } = position;
+    const { element } = clip;
+    if (activeClip !== clip && isPlaying && !canPositionReplacement(clip))
+      return;
+    const needsPosition =
+      restarting ||
+      clip.pendingStartSeconds !== undefined ||
+      (!preserveNaturalEnd &&
+        (!isPlaying ||
+          Math.abs(element.currentTime - offsetSeconds) >
+            SYNC_TOLERANCE_SECONDS));
+    if (
+      needsPosition &&
+      element.readyState >= HTMLMediaElement.HAVE_METADATA &&
+      (isPlaying || clip.heldSeekSeconds !== offsetSeconds)
+    ) {
+      const seekSeconds = clip.pendingStartSeconds ?? offsetSeconds;
+      if (element.currentTime !== seekSeconds)
+        element.currentTime = seekSeconds;
+      clip.heldSeekSeconds = seekSeconds;
+      clip.pendingStartSeconds = undefined;
+      if (activeClip !== clip)
+        clip.replacementSeeks = (clip.replacementSeeks ?? 0) + 1;
+    }
+  }
 
-  return element;
-}
+  function canPositionReplacement(clip: PreparedNarration): boolean {
+    if (clip.element.seeking) return false;
+    if (!clip.replacementSeeks) return true;
+    return (
+      clip.replacementSeeks < REPLACEMENT_SEEK_LIMIT &&
+      !clip.playAttempt &&
+      !clip.element.paused
+    );
+  }
 
-function hasPlayedOut(
-  position: NarrationCuePosition,
-  language: NarrationLanguage,
-): boolean {
-  return (
-    position.offsetSeconds >= narrationDurationSeconds(position.cueId, language)
-  );
-}
-
-/** Seeking before metadata arrives is ignored, so a later frame retries. */
-function seekTo(element: HTMLAudioElement, offsetSeconds: number): void {
-  if (element.readyState < HTMLMediaElement.HAVE_METADATA) return;
-
-  element.currentTime = offsetSeconds;
-}
-
-function isDrifting(element: HTMLAudioElement, offsetSeconds: number): boolean {
-  return Math.abs(element.currentTime - offsetSeconds) > SYNC_TOLERANCE_SECONDS;
+  function followPlayback(clip: PreparedNarration, isPlaying: boolean): void {
+    const { element } = clip;
+    if (!isPlaying) {
+      if (!element.paused || clip.playAttempt) element.pause();
+      clip.playAttempt = undefined;
+      clip.playbackFailed = false;
+      return;
+    }
+    clip.heldSeekSeconds = undefined;
+    if (!element.paused || clip.playAttempt) return;
+    const attempt = element.play();
+    clip.playAttempt = attempt;
+    void attempt.then(
+      () => {
+        if (clip.playAttempt === attempt) clip.playAttempt = undefined;
+      },
+      () => {
+        // A pause, cue switch or unload can cancel an older pending attempt.
+        // A rejected current intent stays latched, rather than retrying per frame.
+        if (clip.playAttempt === attempt) {
+          clip.playbackFailed = true;
+          reportBlockedPlayback();
+        }
+      },
+    );
+  }
 }

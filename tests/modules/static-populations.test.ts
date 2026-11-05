@@ -19,32 +19,40 @@ import {
   Vector3,
 } from "three";
 import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
+import { createRockInstances } from "../../src/modules/rocks/rock-instances";
 import {
-  createRockInstances,
-  disposeRockInstances,
-  initializeRockChunks,
-} from "../../src/modules/rocks/rock-instances";
-import type {
-  GroundZoneId,
-  StaticPopulationParameters,
+  discardStaticPopulationChunks,
+  type GroundZoneId,
+  initializeStaticPopulationChunks,
+  type StaticPopulationParameters,
+  selectStaticPlacement,
+  writeNextStaticPopulationRow,
 } from "../../src/modules/static-population";
 import {
   getVegetationStature,
   VEGETATION_DEFINITION,
 } from "../../src/modules/vegetation/vegetation-definition";
-import {
-  createVegetationChunkWriter,
-  createVegetationInstances,
-  discardVegetationChunks,
-  disposeVegetationInstances,
-  initializeVegetationChunks,
-  uploadVegetationChanges,
-  writeNextVegetationRow,
-} from "../../src/modules/vegetation/vegetation-instances";
+import { createVegetationInstances } from "../../src/modules/vegetation/vegetation-instances";
 import type { GltfAssets } from "../../src/utils/asset-loader/gltf-assets";
+import {
+  disposeInstancedModelPool,
+  uploadCommittedModels,
+} from "../../src/utils/asset-loader/instanced-model-pool";
 import type { SensedMaterial } from "../../src/utils/asset-loader/material-effect";
+import {
+  createChunkCandidateGrid,
+  getCellRandom,
+  getChunkCandidate,
+} from "../../src/world/chunk-candidates";
 import type { WorldSurface } from "../../src/world-surface/world-surface";
-import type { ZoneId } from "../../src/world-surface/zone-settings";
+import {
+  getZoneInfluences,
+  type ZoneConditions,
+} from "../../src/world-surface/zone-field";
+import {
+  ZONE_SETTINGS,
+  type ZoneId,
+} from "../../src/world-surface/zone-settings";
 
 const ASSIGNMENT = {
   slotIndex: 0,
@@ -77,7 +85,7 @@ test("Vegetation keeps every mesh part of an accepted model", () => {
     worldSurface: createFlatSurface("meadow"),
   });
 
-  initializeVegetationChunks(instances, [ASSIGNMENT]);
+  initializeStaticPopulationChunks(instances, [ASSIGNMENT]);
 
   expect(instances.modelPool.group.children).toHaveLength(2);
   expect(instances.modelPool.group.children.every(isInstancedMesh)).toBe(true);
@@ -89,7 +97,7 @@ test("Vegetation keeps every mesh part of an accepted model", () => {
   expect(readScale(instances.modelPool.group.children[1], 0)).toBeGreaterThan(
     0,
   );
-  disposeVegetationInstances(instances);
+  disposeInstancedModelPool(instances.modelPool);
 });
 
 test("Vegetation variation is stable and differs between world cells", () => {
@@ -110,8 +118,8 @@ test("Vegetation variation is stable and differs between world cells", () => {
     worldSurface: createFlatSurface("meadow"),
   });
 
-  initializeVegetationChunks(first, [ASSIGNMENT]);
-  initializeVegetationChunks(second, [ASSIGNMENT]);
+  initializeStaticPopulationChunks(first, [ASSIGNMENT]);
+  initializeStaticPopulationChunks(second, [ASSIGNMENT]);
   const firstTransforms = readTransforms(first.modelPool.group.children[0]);
   const secondTransforms = readTransforms(second.modelPool.group.children[0]);
 
@@ -122,25 +130,30 @@ test("Vegetation variation is stable and differs between world cells", () => {
   ).toHaveLength(4);
   expect(new Set(firstTransforms.map(({ width }) => width))).toHaveLength(4);
   expect(new Set(firstTransforms.map(({ depth }) => depth))).toHaveLength(4);
-  disposeVegetationInstances(first);
-  disposeVegetationInstances(second);
+  disposeInstancedModelPool(first.modelPool);
+  disposeInstancedModelPool(second.modelPool);
 });
 
-test("Vegetation keeps complete model footprints outside river channels", () => {
-  const instances = createVegetationInstances({
-    colors: VEGETATION_COLORS,
-    parameters: createVegetationParameters("meadow"),
-    assets: createMultiPartAssets("plant"),
-    chunkSize: 16,
-    chunkSlotCount: 1,
-    worldSurface: createFlatSurface("meadow", -0.01),
-  });
+test.each([0.999, 1, 2.5])(
+  "Vegetation uses ground clearance %f m regardless of canopy size",
+  (clearance) => {
+    const instances = createVegetationInstances({
+      colors: VEGETATION_COLORS,
+      parameters: createVegetationParameters("meadow"),
+      assets: createMultiPartAssets("plant"),
+      chunkSize: 16,
+      chunkSlotCount: 1,
+      worldSurface: createFlatSurface("meadow", -clearance),
+    });
 
-  initializeVegetationChunks(instances, [ASSIGNMENT]);
+    initializeStaticPopulationChunks(instances, [ASSIGNMENT]);
 
-  expect(readDrawCount(instances.modelPool.group.children[0])).toBe(0);
-  disposeVegetationInstances(instances);
-});
+    expect(readDrawCount(instances.modelPool.group.children[0])).toBe(
+      clearance < 1 ? 0 : 4,
+    );
+    disposeInstancedModelPool(instances.modelPool);
+  },
+);
 
 test("Vegetation applies the effects of each model's own stature", () => {
   const decorated: SensedMaterial[] = [];
@@ -167,7 +180,7 @@ test("Vegetation applies the effects of each model's own stature", () => {
   expect(
     decorated.every((material) => material instanceof MeshBasicMaterial),
   ).toBe(true);
-  disposeVegetationInstances(instances);
+  disposeInstancedModelPool(instances.modelPool);
 });
 
 test("Vegetation reads the bushes as undergrowth and the rest as canopy", () => {
@@ -202,7 +215,7 @@ test("Rocks apply shared material effects to every part material", () => {
 
   expect(decorated).toHaveLength(2);
   expect(new Set(decorated).size).toBe(2);
-  disposeRockInstances(instances);
+  disposeInstancedModelPool(instances.modelPool);
 });
 
 test("Rocks exclude water and retain fixed multi-part buffers", () => {
@@ -215,12 +228,12 @@ test("Rocks exclude water and retain fixed multi-part buffers", () => {
     worldSurface: createFlatSurface("water"),
   });
 
-  initializeRockChunks(instances, [ASSIGNMENT]);
+  initializeStaticPopulationChunks(instances, [ASSIGNMENT]);
 
   expect(instances.modelPool.group.children).toHaveLength(2);
   expect(readDrawCount(instances.modelPool.group.children[0])).toBe(0);
   expect(readDrawCount(instances.modelPool.group.children[1])).toBe(0);
-  disposeRockInstances(instances);
+  disposeInstancedModelPool(instances.modelPool);
 });
 
 test("recycling hides only the outgoing Vegetation slot", () => {
@@ -234,28 +247,132 @@ test("recycling hides only the outgoing Vegetation slot", () => {
       worldX < 32 ? "meadow" : "water",
     ),
   });
-  initializeVegetationChunks(instances, [
+  initializeStaticPopulationChunks(instances, [
     ASSIGNMENT,
     { ...ASSIGNMENT, slotIndex: 1, chunkX: 1, originX: 16 },
   ]);
   const mesh = instances.modelPool.group.children[0];
   expect(readDrawCount(mesh)).toBe(8);
 
-  const firstWriter = createVegetationChunkWriter({
-    ...ASSIGNMENT,
-    revision: 2,
-    chunkX: 2,
-    originX: 32,
-  });
-  discardVegetationChunks(instances, [firstWriter.assignment]);
-  uploadVegetationChanges(instances);
+  const firstWriter = {
+    assignment: {
+      ...ASSIGNMENT,
+      revision: 2,
+      chunkX: 2,
+      originX: 32,
+    },
+    nextRow: 0,
+  };
+  discardStaticPopulationChunks(instances, [firstWriter.assignment]);
+  uploadCommittedModels(instances.modelPool);
   expect(readDrawCount(mesh)).toBe(4);
 
-  expect(writeNextVegetationRow(instances, firstWriter)).toBe(false);
-  expect(writeNextVegetationRow(instances, firstWriter)).toBe(true);
-  uploadVegetationChanges(instances);
+  expect(writeNextStaticPopulationRow(instances, firstWriter)).toBe(false);
+  expect(writeNextStaticPopulationRow(instances, firstWriter)).toBe(true);
+  uploadCommittedModels(instances.modelPool);
   expect(readDrawCount(mesh)).toBe(4);
-  disposeVegetationInstances(instances);
+  disposeInstancedModelPool(instances.modelPool);
+});
+
+test("pure zones retain the exact placement and variant random draws", () => {
+  const grid = createChunkCandidateGrid(32, 1);
+  for (const zone of [
+    "meadow",
+    "coniferForest",
+    "deciduousForest",
+    "shrubSlope",
+  ] as const) {
+    const parameters: StaticPopulationParameters = {
+      ...createVegetationParameters(zone),
+      candidateSpacingMeters: 1,
+      assets: [createAssetSettings("first"), createAssetSettings("second")],
+      instancesPerHectareByZone: { [zone]: 5_000 },
+      variantsByZone: {
+        [zone]: [
+          { assetId: "first", weight: 1 },
+          { assetId: "second", weight: 3 },
+        ],
+      },
+    };
+    const surface = createFlatSurface(zone);
+    const actual: (string | undefined)[] = [];
+    const expected: (string | undefined)[] = [];
+    for (let index = 0; index < grid.candidateCount; index++) {
+      const candidate = getChunkCandidate(
+        ASSIGNMENT,
+        grid,
+        parameters.seed,
+        index,
+      );
+      const density = getCellRandom(
+        parameters.seed,
+        candidate.cellX,
+        candidate.cellZ,
+        2,
+      );
+      const variant = getCellRandom(
+        parameters.seed,
+        candidate.cellX,
+        candidate.cellZ,
+        3,
+      );
+      expected.push(
+        density < 0.5 ? (variant <= 0.25 ? "first" : "second") : undefined,
+      );
+      actual.push(
+        selectStaticPlacement(parameters, grid, surface, ASSIGNMENT, index)
+          ?.model.id,
+      );
+    }
+    expect(actual).toEqual(expected);
+  }
+});
+
+test("shared transition weights blend population density and variants deterministically", () => {
+  const grid = createChunkCandidateGrid(32, 1);
+  const parameters: StaticPopulationParameters = {
+    ...createVegetationParameters("meadow"),
+    candidateSpacingMeters: 1,
+    assets: [createAssetSettings("meadow"), createAssetSettings("forest")],
+    instancesPerHectareByZone: { meadow: 2_500, coniferForest: 7_500 },
+    variantsByZone: {
+      meadow: [{ assetId: "meadow", weight: 1 }],
+      coniferForest: [{ assetId: "forest", weight: 1 }],
+    },
+  };
+  const conditions: ZoneConditions = {
+    riverChannelMarginMeters: -1,
+    waterDepthMeters: 1,
+    groundSlope: 0,
+    forestRegionValue: ZONE_SETTINGS.coniferForestThreshold,
+  };
+  const surface = {
+    ...createFlatSurface("meadow"),
+    zoneInfluencesAt: () => getZoneInfluences(conditions, ZONE_SETTINGS),
+  };
+  const first: (string | undefined)[] = [];
+  const repeated: (string | undefined)[] = [];
+  for (let index = 0; index < grid.candidateCount; index++) {
+    first.push(
+      selectStaticPlacement(parameters, grid, surface, ASSIGNMENT, index)?.model
+        .id,
+    );
+    repeated.push(
+      selectStaticPlacement(parameters, grid, surface, ASSIGNMENT, index)?.model
+        .id,
+    );
+  }
+  expect(repeated).toEqual(first);
+  // Half of each zone's density: 12.5% meadow, 37.5% forest, 50% empty.
+  expect(
+    first.filter((id) => id === "meadow").length / first.length,
+  ).toBeCloseTo(0.125, 1);
+  expect(
+    first.filter((id) => id === "forest").length / first.length,
+  ).toBeCloseTo(0.375, 1);
+  expect(
+    first.filter((id) => id === undefined).length / first.length,
+  ).toBeCloseTo(0.5, 1);
 });
 
 function createVegetationParameters(
@@ -339,6 +456,15 @@ function createFlatSurface(
       forestRegionValue: 0,
     }),
     zoneAt: (worldX) => (typeof zone === "function" ? zone(worldX) : zone),
+    zoneInfluencesAt: (worldX) => {
+      const id = typeof zone === "function" ? zone(worldX) : zone;
+      return {
+        meadow: Number(id === "meadow"),
+        coniferForest: Number(id === "coniferForest"),
+        deciduousForest: Number(id === "deciduousForest"),
+        shrubSlope: Number(id === "shrubSlope"),
+      };
+    },
   };
 }
 

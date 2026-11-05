@@ -20,9 +20,10 @@ import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { createAnimalSurfaceAlignment } from "../../src/modules/animals/animal-surface-orientation";
 import { createAnimalsModule } from "../../src/modules/animals/animals";
 import type { AnimalsDefinition } from "../../src/modules/animals/animals-definition";
+import type { AnimalSpeciesId } from "../../src/modules/scent-sources";
 import type { GltfAssets } from "../../src/utils/asset-loader/gltf-assets";
 import type { SensedMaterial } from "../../src/utils/asset-loader/material-effect";
-import type { Viewpoint } from "../../src/world/viewer-rig";
+import type { Viewpoint } from "../../src/world/viewpoint";
 import type { WorldSurface } from "../../src/world-surface/world-surface";
 import type { ZoneId } from "../../src/world-surface/zone-settings";
 
@@ -67,9 +68,13 @@ test("Animals fade in when they take a visible slot", () => {
   const scene = new Scene();
   const viewpoint: Viewpoint = {
     worldPosition: new Vector3(),
+    worldBodyDirection: new Vector3(0, 0, -1),
+    worldDirection: new Vector3(0, 0, -1),
+    worldUp: new Vector3(0, 1, 0),
+    viewHalfAngleRadians: Math.PI / 4,
     viewDistanceMeters: DEFAULT_VIEW_DISTANCE_METERS,
   };
-  const { module } = createAnimalsModule({
+  const module = createAnimalsModule({
     scene,
     viewpoint,
     definition: DEFINITION,
@@ -118,9 +123,13 @@ test("Animals animate only the nearest bounded population", () => {
   const viewerPosition = new Vector3();
   const viewpoint: Viewpoint = {
     worldPosition: viewerPosition,
+    worldBodyDirection: new Vector3(0, 0, -1),
+    worldDirection: new Vector3(0, 0, -1),
+    worldUp: new Vector3(0, 1, 0),
+    viewHalfAngleRadians: Math.PI / 4,
     viewDistanceMeters: DEFAULT_VIEW_DISTANCE_METERS,
   };
-  const { module } = createAnimalsModule({
+  const module = createAnimalsModule({
     scene,
     viewpoint,
     definition: DEFINITION,
@@ -144,48 +153,70 @@ test("Animals animate only the nearest bounded population", () => {
   expect(scene.children).toHaveLength(0);
 });
 
-test("Animals decorate every actor material with supplied effects", () => {
-  const scene = new Scene();
-  const viewerPosition = new Vector3();
-  const viewpoint: Viewpoint = {
-    worldPosition: viewerPosition,
-    viewDistanceMeters: DEFAULT_VIEW_DISTANCE_METERS,
-  };
-  const decoratedMaterials: SensedMaterial[] = [];
-  const bodyMatrices: Matrix4[] = [];
-  const { module } = createAnimalsModule({
-    scene,
-    viewpoint,
-    definition: DEFINITION,
-    preset: PRESET,
-    assets: createAnimalAssets(),
-    worldSurface: createFlatSurface(),
-    effectsFor: (bodyMatrix) => {
-      bodyMatrices.push(bodyMatrix);
-      return [
-        {
-          applyTo: (material: SensedMaterial) => {
-            decoratedMaterials.push(material);
+test.each([false, true])(
+  "Animals own decorated materials even when an effect fails: %s",
+  (fails) => {
+    const scene = new Scene();
+    const viewerPosition = new Vector3();
+    const viewpoint: Viewpoint = {
+      worldPosition: viewerPosition,
+      worldBodyDirection: new Vector3(0, 0, -1),
+      worldDirection: new Vector3(0, 0, -1),
+      worldUp: new Vector3(0, 1, 0),
+      viewHalfAngleRadians: Math.PI / 4,
+      viewDistanceMeters: DEFAULT_VIEW_DISTANCE_METERS,
+    };
+    const decoratedMaterials: SensedMaterial[] = [];
+    let disposed = 0;
+    const bodyMatrices: Matrix4[] = [];
+    const module = createAnimalsModule({
+      scene,
+      viewpoint,
+      definition: DEFINITION,
+      preset: PRESET,
+      assets: createAnimalAssets(),
+      worldSurface: createFlatSurface(),
+      effectsFor: (bodyMatrix) => {
+        bodyMatrices.push(bodyMatrix);
+        return [
+          {
+            applyTo: (material: SensedMaterial) => {
+              decoratedMaterials.push(material);
+              material.addEventListener("dispose", () => disposed++);
+              if (fails && decoratedMaterials.length === 2)
+                throw new Error("Effect failed");
+            },
           },
-        },
-      ];
-    },
-  });
+        ];
+      },
+    });
 
-  module.load();
+    if (fails) {
+      expect(() => module.load()).toThrow("Effect failed");
+      expect(disposed).toBe(2);
+      expect(scene.children).toHaveLength(0);
+      module.unload();
+      expect(disposed).toBe(2);
+      return;
+    }
 
-  // Two species with two actors each and one material per cloned model.
-  expect(decoratedMaterials).toHaveLength(4);
-  // Every decorated mesh is handed the route into its own body space.
-  expect(bodyMatrices).toHaveLength(4);
-  expect(bodyMatrices.every((matrix) => matrix instanceof Matrix4)).toBe(true);
-  expect(
-    decoratedMaterials.every(
-      (material) => material instanceof MeshBasicMaterial,
-    ),
-  ).toBe(true);
-  module.unload();
-});
+    module.load();
+
+    // Two species with two actors each and one material per cloned model.
+    expect(decoratedMaterials).toHaveLength(4);
+    // Every decorated mesh is handed the route into its own body space.
+    expect(bodyMatrices).toHaveLength(4);
+    expect(bodyMatrices.every((matrix) => matrix instanceof Matrix4)).toBe(
+      true,
+    );
+    expect(
+      decoratedMaterials.every(
+        (material) => material instanceof MeshBasicMaterial,
+      ),
+    ).toBe(true);
+    module.unload();
+  },
+);
 
 test("Animals reject an impossible visibility budget", () => {
   expect(() =>
@@ -193,6 +224,10 @@ test("Animals reject an impossible visibility budget", () => {
       scene: new Scene(),
       viewpoint: {
         worldPosition: new Vector3(),
+        worldBodyDirection: new Vector3(0, 0, -1),
+        worldDirection: new Vector3(0, 0, -1),
+        worldUp: new Vector3(0, 1, 0),
+        viewHalfAngleRadians: Math.PI / 4,
         viewDistanceMeters: DEFAULT_VIEW_DISTANCE_METERS,
       },
       definition: { ...DEFINITION, maxVisible: 5 },
@@ -208,9 +243,13 @@ test("Animals occupy separate territories around the player", () => {
   const viewerPosition = new Vector3();
   const viewpoint: Viewpoint = {
     worldPosition: viewerPosition,
+    worldBodyDirection: new Vector3(0, 0, -1),
+    worldDirection: new Vector3(0, 0, -1),
+    worldUp: new Vector3(0, 1, 0),
+    viewHalfAngleRadians: Math.PI / 4,
     viewDistanceMeters: DEFAULT_VIEW_DISTANCE_METERS,
   };
-  const { module } = createAnimalsModule({
+  const module = createAnimalsModule({
     scene,
     viewpoint,
     definition: {
@@ -250,50 +289,6 @@ test("Animals occupy separate territories around the player", () => {
   module.unload();
 });
 
-test("Animals expose the visible actor positions within their budget", () => {
-  const scene = new Scene();
-  const viewerPosition = new Vector3();
-  const viewpoint: Viewpoint = {
-    worldPosition: viewerPosition,
-    viewDistanceMeters: DEFAULT_VIEW_DISTANCE_METERS,
-  };
-  const handle = createAnimalsModule({
-    scene,
-    viewpoint,
-    definition: DEFINITION,
-    preset: PRESET,
-    assets: createAnimalAssets(),
-    worldSurface: createFlatSurface(),
-  });
-
-  expect(handle.getVisibleWorldPositions()).toHaveLength(0);
-
-  handle.module.load();
-  handle.module.activate();
-  handle.module.update?.(0.25);
-
-  const positions = handle.getVisibleWorldPositions();
-  expect(positions.length / 3).toBeLessThanOrEqual(DEFINITION.maxVisible);
-  expect(positions).toHaveLength(3);
-
-  const population = scene.children[0];
-  if (!(population instanceof Group)) throw new Error("Expected animal Group");
-  const visibleActor = population.children.find(({ visible }) => visible);
-  if (!visibleActor) throw new Error("Expected one visible actor");
-  // The packed buffer stores 32-bit floats of the 64-bit actor positions.
-  expect(positions[0] ?? 0).toBeCloseTo(visibleActor.position.x, 4);
-  expect(positions[1] ?? 0).toBeCloseTo(visibleActor.position.y, 4);
-  expect(positions[2] ?? 0).toBeCloseTo(visibleActor.position.z, 4);
-
-  // Put away but still updated — the warming state a show holds a layer in
-  // before its sense reveals it: the actors keep walking and give up their
-  // visible slots, so nothing off screen is reported as visible.
-  handle.module.deactivate();
-  handle.module.update?.(0.25);
-  expect(handle.getVisibleWorldPositions()).toHaveLength(0);
-  handle.module.unload();
-});
-
 test("Animals align their up axis with the local surface slope", () => {
   const actor = new Group();
   const expectedSurfaceNormal = new Vector3(0, 1, -0.5).normalize();
@@ -313,6 +308,10 @@ test("Animals lean onto an arc at a zone edge instead of pivoting", () => {
   const scene = new Scene();
   const viewpoint: Viewpoint = {
     worldPosition: new Vector3(),
+    worldBodyDirection: new Vector3(0, 0, -1),
+    worldDirection: new Vector3(0, 0, -1),
+    worldUp: new Vector3(0, 1, 0),
+    viewHalfAngleRadians: Math.PI / 4,
     viewDistanceMeters: DEFAULT_VIEW_DISTANCE_METERS,
   };
   const species = {
@@ -324,7 +323,7 @@ test("Animals lean onto an arc at a zone edge instead of pivoting", () => {
   };
   const headings: number[] = [];
   const bodyPath: { x: number; z: number }[] = [];
-  const { module } = createAnimalsModule({
+  const module = createAnimalsModule({
     scene,
     viewpoint,
     definition: {
@@ -420,10 +419,10 @@ function readVisibleOpacity(population: Group): number {
   return highest;
 }
 
-function createSpecies(id: string) {
+function createSpecies(id: AnimalSpeciesId) {
   return {
     id,
-    url: `/animals/${id}.glb`,
+    url: `/models/animals/${id}.glb`,
     count: 2,
     heightMeters: 1,
     speedMetersPerSecond: 1,
@@ -463,6 +462,9 @@ function createFlatSurface(): WorldSurface {
       groundSlope: 0,
       forestRegionValue: 0,
     }),
+    zoneInfluencesAt: () => {
+      throw new Error("Animal habitats must use exact zone membership");
+    },
     zoneAt: () => "meadow",
   };
 }
@@ -477,10 +479,14 @@ interface IslandWalk {
 /** Where one deer stands after walking the island at this frame rate. */
 function walkOnIsland(framesPerSecond: number): IslandWalk {
   let latest: IslandWalk | undefined;
-  const { module } = createAnimalsModule({
+  const module = createAnimalsModule({
     scene: new Scene(),
     viewpoint: {
       worldPosition: new Vector3(),
+      worldBodyDirection: new Vector3(0, 0, -1),
+      worldDirection: new Vector3(0, 0, -1),
+      worldUp: new Vector3(0, 1, 0),
+      viewHalfAngleRadians: Math.PI / 4,
       viewDistanceMeters: DEFAULT_VIEW_DISTANCE_METERS,
     },
     definition: {
@@ -565,4 +571,51 @@ function getDirectionIndex(worldX: number, worldZ: number): number {
   const angle = Math.atan2(worldX, worldZ);
   const positiveAngle = (angle + fullCircleRadians) % fullCircleRadians;
   return Math.floor((positiveAngle / fullCircleRadians) * 4);
+}
+
+test("Animals keep walking while warming but report bodies only when shown", () => {
+  const scene = new Scene();
+  const viewpoint: Viewpoint = {
+    worldPosition: new Vector3(),
+    worldBodyDirection: new Vector3(0, 0, -1),
+    worldDirection: new Vector3(0, 0, -1),
+    worldUp: new Vector3(0, 1, 0),
+    viewHalfAngleRadians: Math.PI / 4,
+    viewDistanceMeters: DEFAULT_VIEW_DISTANCE_METERS,
+  };
+  let reports = 0;
+  const module = createAnimalsModule({
+    scene,
+    viewpoint,
+    definition: DEFINITION,
+    preset: PRESET,
+    assets: createAnimalAssets(),
+    worldSurface: createFlatSurface(),
+    onBodiesUpdated: () => {
+      reports += 1;
+    },
+  });
+
+  // Loaded but put away is the warming state a show holds a layer in before
+  // its sense reveals it: the population walks, but prints no scent trails.
+  module.load();
+  const population = scene.children[0];
+  if (!(population instanceof Group)) throw new Error("Expected animal Group");
+  const before = readActorPositions(population);
+  for (let step = 0; step < 30; step += 1) module.update?.(1 / 10);
+  expect(reports).toBe(0);
+  expect(readActorPositions(population)).not.toEqual(before);
+
+  module.activate();
+  module.update?.(1 / 60);
+  expect(reports).toBe(1);
+  module.unload();
+});
+
+function readActorPositions(population: Group): number[] {
+  return population.children.flatMap(({ position }) => [
+    position.x,
+    position.y,
+    position.z,
+  ]);
 }

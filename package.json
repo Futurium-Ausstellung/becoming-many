@@ -5,13 +5,18 @@
   "scripts": {
     "dev": "vite",
     "test": "bun test",
-    "benchmark": "bun tests/benchmark/run-benchmark.ts",
+    "test:browser": "bun tests/browser/run-browser-smoke.ts",
+    "test:tutorial-ui": "bun tests/browser/tutorial-timeline.mjs",
+    "test:language": "bun tests/browser/live-language.mjs",
+    "observe:show": "bun tests/browser/run-show-observation.ts",
     "station": "bun station/station-server.ts",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "check": "tsc --noEmit",
     "lint": "biome check .",
-    "m5-sim": "bun station/m5-sim.ts"
+    "m5-sim": "bun firmware/m5/tools/simulator.ts",
+    "m5-export": "bun firmware/m5/tools/export-firmware.ts",
+    "m5-test-config": "bun firmware/m5/tools/test-config.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.9",
@@ -24,6 +29,7 @@
   },
   "dependencies": {
     "esp-web-tools": "^10.4.0",
+    "lucide-static": "^1.43.0",
     "three": "^0.185.1",
     "tone": "14.8.49"
   },

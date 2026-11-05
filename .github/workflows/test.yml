@@ -2,8 +2,9 @@
 # Context: `bun test` covers what the codebase decides before it touches a
 #   browser, an audio graph, or the DOM, and needs no display or device.
 # Responsibility: Run the full Bun test suite.
-# Boundary: The deterministic browser benchmark is a separate, build-dependent
-#   run (`bun run benchmark`) and deliberately stays outside this gate.
+# Boundary: The browser suites (`test:browser`, `test:tutorial-ui`,
+#   `test:language`) need a Vite server and Playwright and deliberately stay
+#   outside this gate.
 
 name: Test
 

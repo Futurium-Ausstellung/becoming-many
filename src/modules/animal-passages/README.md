@@ -36,7 +36,9 @@ A passage's whole pose comes from `passageProgressAt(schedule, id, showTime)`.
 Nothing is accumulated across frames, so scrubbing into a crossing lands the
 animal at the point on its route where playing through would have put it, and
 scrubbing back out takes it away again — the same rule the sense strengths and
-the background follow.
+the background follow. Position along the route is derived; the bat's bearing
+is not: it takes the visitor's heading as it enters, so scrubbing out and back
+in can send it across on a different bearing.
 
 That is the one deliberate departure from the predecessor project, where these
 were fire-and-forget events pulsed over a bus: a rising edge cannot be seeked,

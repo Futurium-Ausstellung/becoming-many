@@ -17,6 +17,10 @@ on:
       - docker-compose*.yml
       - package.json
       - bun.lock
+      - station/**
+      - shared/**
+      - firmware/m5/tools/simulator.ts
+      - src/m5/protocol.ts
       - .github/workflows/image.yml
   push:
     branches: [main]
@@ -26,6 +30,10 @@ on:
       - docker-compose*.yml
       - package.json
       - bun.lock
+      - station/**
+      - shared/**
+      - firmware/m5/tools/simulator.ts
+      - src/m5/protocol.ts
       - .github/workflows/image.yml
 
 permissions:

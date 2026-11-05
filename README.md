@@ -26,8 +26,9 @@ the current source.
 
 The project is now in stabilization and refinement. Active work is limited to
 measured performance improvements, reliability, code cleanup, issue fixes, and
-small issue-backed product additions. Physical PICO 4 performance and PCVR
-acceptance are still open; desktop evidence does not close those gates.
+small issue-backed product additions. Windows-PCVR over USB-C is the installation
+platform; physical performance and operational acceptance remain open. Tutorial
+and credits are required; their remaining content and flow choices are issue-backed.
 
 [Project documentation](docs/README.md) records the current implementation,
 remaining work, and installation direction.
@@ -42,9 +43,10 @@ bun install
 bun run dev
 ```
 
-The bare page at `/` runs the complete show and includes a rehearsal transport.
-Use `/test.html?level=<name>` or `/<name>` for a showless level, and add
-`&benchmark[=<profile>]` for a deterministic route. See
+The experience page at `/` runs the complete show and includes a rehearsal
+transport. Use `/?level=<name>` or `/<name>` to open one standalone level on
+that same page, and add `&benchmark[=<profile>]` for a deterministic route.
+See
 [AGENTS.md](AGENTS.md) for conventions and verification commands.
 
 ## Running a Station
@@ -62,9 +64,9 @@ the M5 simulator, and deployment details.
 ## Performance
 
 Performance is tracked in [docs/performance.md](docs/performance.md). The target
-is stable 90 Hz on a physical PICO 4. The deterministic benchmark and dated
-desktop reports are regression evidence only; no current headset acceptance is
-recorded.
+is stable 90 Hz on the actual Windows-PCVR installation over USB-C, including
+transport and headset. Mac browser tests and deterministic reports are development
+and regression evidence only; no installation acceptance is recorded.
 
 ## License
 

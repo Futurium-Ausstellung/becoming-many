@@ -3,11 +3,11 @@
  * Context: The choice is remembered per station browser; without one the
  *   browser's own language decides, so a German venue reads German unprompted.
  * Responsibility: Cover stored, offered, and unrecognised inputs.
- * Boundary: localStorage itself is the browser's, untested by design.
+ * Boundary: localStorage itself is Entry's, untested by design.
  */
 
 import { describe, expect, test } from "bun:test";
-import { resolveOperatorLanguage } from "../../src/conductor/operator-language";
+import { resolveOperatorLanguage } from "../../src/ui/conductor/operator-language";
 
 describe("resolveOperatorLanguage", () => {
   test("takes the stored choice over the browser's", () => {

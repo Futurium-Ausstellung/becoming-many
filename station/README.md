@@ -3,7 +3,7 @@ Purpose: Document the one-process station server and its Docker deployment.
 Context: A station PC runs this process and opens one browser window on it.
 Responsibility: Explain what the process does, its endpoints, its env vars,
   and what it deliberately does not do.
-Boundary: The deployment-config contract the pages read lives in ../src/station.
+Boundary: The deployment-config contract the pages read lives in ../shared.
 -->
 
 # Station server
@@ -14,26 +14,28 @@ facts it was started with. The station window itself is the conductor page,
 which hosts the show in-process — this process carries no show traffic.
 
 It runs under Bun, not in a browser, which is why it sits here rather than in
-`src/` — the same split as the Chromium benchmark runner in `tests/benchmark/`,
-which drives `src/benchmark`. Nothing in either page's module graph imports it,
+`src/`. Nothing in either page's module graph imports it,
 so Vite never bundles it and it exports nothing.
 
 `bun run m5-sim` starts a second small Bun process from this folder: a stand-in
 M5 controller answering `GET /state` with a slow tilt sweep, for developing the
 polling chain without hardware (`--device` and `--firmware` flags exercise the
-wrong-device and firmware-mismatch warnings).
+diagnostic metadata without restricting steering).
 
 ## Endpoints
 
 - `/conductor.html` — the station window, served from `dist/` (run
-  `bun run build` first; in development the pages come from `bun run dev`
-  instead, which proxies `/config` here). `/` stays the bare rehearsal page.
-- `/test.html` and named paths such as `/echo` — standalone development levels,
-  benchmarks, and opt-in diagnostics.
+  `bun run build` first). Development uses `bun run dev` independently with
+  empty deployment defaults. `/` stays the bare rehearsal page.
+- The experience page at `/?level=<name>` and named paths such as `/echo` —
+  standalone development levels, benchmarks, and opt-in diagnostics. These use
+  the root document; there is no separate diagnostics page.
+- `/tutorial` — an alias for the standalone Start preset: airborne particles
+  with global flight control and the shared Run, without tutorial or Show playback.
 - `/health` — liveness JSON: status and uptime. It reports the process, never
   the show: a healthy server with zero windows is healthy.
 - `/config` — the deployment facts the process was started with, for the
-  pages to fetch on load (`src/station/deployment-config.ts`).
+  pages to fetch on load (`shared/deployment-config.ts`).
 
 ## Environment
 
@@ -44,7 +46,8 @@ for the full descriptions.
 - `PORT` — listen port (default 7823).
 - `M5_HOST` — this station's M5 controller; the conductor page arms the show
   with it from startup.
-- `M5_DEVICE_ID` — deviceId every M5 payload must carry.
+- `M5_DEVICE_ID` — retained deployment metadata; it no longer restricts which
+  device can steer. `M5_HOST` selects the controller.
 - `STATION_NAME` — label telling a technician which station this is.
 
 ## Docker

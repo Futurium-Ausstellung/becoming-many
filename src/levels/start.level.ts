@@ -1,0 +1,35 @@
+/** A white free-flight environment with airborne particles and directional light. */
+import type { LevelPreset } from "./level-preset";
+
+// Start settings: world, flight preview, and airborne particles.
+export const level: LevelPreset = {
+  // 1. World and flight
+  flightSpeedMetersPerSecond: 2,
+  backgroundColor: 0xffffff,
+  viewDistance: 128,
+  desktopFieldOfViewDegrees: 80,
+  maximumGroundClearanceMeters: 50,
+
+  // 2. Flight preview
+  flightGuidance: {
+    color: 0xf0bc50,
+    opacity: 0.6,
+    lengthMeters: 18,
+    behindMeters: 4,
+    verticalBendMeters: 0.75,
+    widthMeters: 3,
+    belowFlightMeters: 0.5,
+  },
+
+  // 3. Airborne particles
+  airParticles: {
+    streaming: { chunkLevel: 0, viewDistanceMeters: 16, fadeStartMeters: 12 },
+    density: { particlesPerChunk: 384 },
+    appearance: { color: 0x899096, sizeMeters: 0.045, shape: "circle" },
+    motion: {
+      horizontalAmplitudeMeters: 0.12,
+      verticalAmplitudeMeters: 0.24,
+      speedMultiplier: 0.45,
+    },
+  },
+};

@@ -89,7 +89,7 @@ panel away, and the clock clamping at the show length is what holds the credits
 up until staff restart. What the panel looks like belongs to
 `src/modules/end-credits`.
 
-`show-runtime.ts` composes the two halves; this folder never imports
+`show.runtime.ts` composes the two halves; this folder never imports
 `src/sound`, and `src/sound` never decides when a cue plays.
 
 ## Deliberately Absent
@@ -99,6 +99,6 @@ per-sense audio beds are absent. The current derived ramp in `show-levels.ts`
 is the complete implemented intensity signal. Add authored curves or a tutorial
 only when a concrete product issue requires them.
 
-The conductor page (`src/conductor`) reads this folder to draw and scrub the
+The conductor page (`src/ui/conductor`) reads this folder to draw and scrub the
 schedule. It is a consumer, never an author: cue times change by editing the
 typed data file here, and there is still one schedule authority total.

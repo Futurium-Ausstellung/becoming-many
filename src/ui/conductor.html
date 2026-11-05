@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0d1311">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./app.css">
+    <title>Becoming Many — Conductor</title>
+  </head>
+  <body>
+    <p role="alert" class="startup-error" data-startup-error hidden>
+      Unable to start Becoming Many. Please reload.
+    </p>
+    <main id="conductor-root" class="conductor" inert>
+      <header class="conductor__masthead">
+        <section
+          class="conductor__tiles"
+          aria-label="Station status"
+          data-copy-aria-label="status.label"
+        >
+          <div class="conductor__tile" data-tile="sound">
+            <svg
+              class="lucide-icon"
+              width="32"
+              height="32"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <use data-icon="volume-2"></use>
+            </svg>
+            <div class="conductor__tile-body">
+              <span class="conductor__tile-label" data-copy="status.sound"
+                >Sound</span
+              ><output class="conductor__tile-value">—</output>
+            </div>
+          </div>
+          <div class="conductor__tile" data-tile="controller">
+            <svg
+              class="lucide-icon"
+              width="32"
+              height="32"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <use data-icon="smartphone"></use>
+            </svg>
+            <div class="conductor__tile-body">
+              <span class="conductor__tile-label" data-copy="status.controller"
+                >Controller</span
+              ><output class="conductor__tile-value">—</output>
+            </div>
+          </div>
+          <div class="conductor__tile" data-tile="headset">
+            <svg
+              class="lucide-icon"
+              width="32"
+              height="32"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <use data-icon="headset"></use>
+            </svg>
+            <div class="conductor__tile-body">
+              <span class="conductor__tile-label" data-copy="status.headset"
+                >Headset</span
+              ><output class="conductor__tile-value">—</output>
+            </div>
+          </div>
+          <button type="button" class="conductor__stream-button">
+            <span class="conductor__button-icon"
+              ><svg
+                class="lucide-icon"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <use data-icon="headset"></use>
+              </svg></span
+            ><span data-headset-label></span>
+          </button>
+        </section>
+        <button
+          type="button"
+          class="conductor__tech-button"
+          aria-label="Technician tools"
+          data-copy-aria-label="masthead.technicianTools"
+          aria-controls="conductor-technician-tools"
+          aria-expanded="false"
+        >
+          <span class="conductor__button-icon"
+            ><svg
+              class="lucide-icon"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <use data-icon="wrench"></use>
+            </svg></span
+          >
+        </button>
+      </header>
+
+      <section
+        class="conductor__transport"
+        aria-label="Transport"
+        data-copy-aria-label="transport.label"
+      >
+        <div class="conductor__transport-controls">
+          <button type="button" class="conductor__transport-button">
+            <span class="conductor__transport-icon"
+              ><span data-play-icon
+                ><svg
+                  class="lucide-icon"
+                  width="48"
+                  height="48"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <use data-icon="play"></use>
+                </svg></span
+              ><span data-pause-icon hidden
+                ><svg
+                  class="lucide-icon"
+                  width="48"
+                  height="48"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <use data-icon="pause"></use>
+                </svg></span
+              ></span
+            ><span data-transport-label>Play</span>
+          </button>
+          <button
+            type="button"
+            class="conductor__stop-button"
+            title="Reset time and flight position"
+            data-copy-title="transport.stopTitle"
+          >
+            <svg
+              class="lucide-icon"
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <use data-icon="square"></use>
+            </svg>
+            <span data-copy="transport.stop">Stop</span>
+          </button>
+        </div>
+        <section
+          class="conductor__language"
+          aria-label="Narration language"
+          data-copy-aria-label="narration.label"
+        >
+          <button type="button" data-language="en">EN</button
+          ><button type="button" data-language="de">DE</button>
+        </section>
+      </section>
+      <section
+        class="conductor__stage-view"
+        aria-label="Experience preview"
+        data-copy-aria-label="preview.label"
+      >
+        <div id="world-stage" class="conductor__stage-mount">
+          <canvas class="experience-canvas"></canvas>
+        </div>
+      </section>
+      <section
+        class="conductor__timeline"
+        aria-label="Show timeline"
+        data-copy-aria-label="timeline.label"
+      >
+        <output
+          data-timeline-readout
+          aria-label="Elapsed and total show time"
+          data-copy-aria-label="timeline.readout"
+        ></output>
+        <div
+          class="conductor__timeline-slider"
+          role="slider"
+          tabindex="0"
+          aria-label="Show position"
+          data-copy-aria-label="timeline.position"
+          aria-valuemin="0"
+          aria-valuenow="0"
+        >
+          <svg class="timeline__track" aria-hidden="true">
+            <line class="timeline__playhead" y2="100%"></line>
+          </svg>
+        </div>
+        <div class="conductor__chapters"></div>
+        <template data-chapter-slot
+          ><svg class="timeline__slot" aria-hidden="true">
+            <rect
+              class="timeline__slot-background"
+              width="100%"
+              height="100%"
+            ></rect>
+            <rect class="timeline__progress" y="60" height="24"></rect>
+            <text class="timeline__slot-name" x="10" y="21"></text>
+          </svg></template
+        >
+        <template data-chapter-button
+          ><button type="button" class="conductor__chapter-button">
+            <span data-name></span><span class="conductor__chapter-time"></span>
+          </button></template
+        >
+      </section>
+
+      <dialog
+        class="conductor__drawer"
+        id="conductor-technician-tools"
+        aria-label="Technician tools"
+        data-copy-aria-label="drawer.title"
+      >
+        <div class="conductor__drawer-group">
+          <div class="conductor__drawer-header">
+            <span data-copy="drawer.title">Technician tools</span>
+            <button
+              type="button"
+              class="conductor__drawer-close"
+              aria-label="Close technician tools"
+              data-copy-aria-label="drawer.close"
+            >
+              <svg
+                class="lucide-icon"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <use data-icon="x"></use>
+              </svg>
+            </button>
+          </div>
+          <p class="conductor__drawer-caution" data-copy="drawer.caution">
+            Changes here can interrupt the show.
+          </p>
+        </div>
+        <div class="conductor__drawer-group">
+          <span
+            class="conductor__drawer-heading"
+            data-copy="drawer.rehearsalSpeed"
+            >Rehearsal speed</span
+          >
+          <div class="conductor__speeds">
+            <button type="button" data-time-scale="0.25">0.25×</button>
+            <button type="button" data-time-scale="0.5">0.5×</button>
+            <button type="button" data-time-scale="1">1×</button>
+            <button type="button" data-time-scale="2">2×</button>
+          </div>
+        </div>
+        <div class="conductor__drawer-group">
+          <span class="conductor__drawer-heading" data-copy="drawer.resets"
+            >Resets</span
+          >
+          <div class="conductor__resets">
+            <button type="button" data-reset-show data-copy="drawer.resetShow">
+              Reset show time
+            </button><button
+              type="button"
+              data-reset-flight
+              data-copy="drawer.resetFlight"
+            >
+              Reset flight position
+            </button><button type="button" class="conductor__reload-button">
+              Reload page
+            </button>
+          </div>
+        </div>
+        <div class="conductor__drawer-group">
+          <span
+            class="conductor__drawer-heading"
+            data-copy="drawer.operatorLanguage"
+            >Page language</span
+          >
+          <div class="conductor__operator-languages">
+            <button type="button" data-operator-language="en">EN</button
+            ><button type="button" data-operator-language="de">DE</button>
+          </div>
+        </div>
+        <div class="conductor__drawer-group">
+          <span class="conductor__drawer-heading" data-copy="drawer.m5"
+            >M5 controller</span
+          >
+          <details class="conductor__controller-state">
+            <summary data-copy="drawer.controllerState">
+              Controller state
+            </summary>
+            <p>
+              <span data-copy="drawer.bundledFirmware">Bundled firmware:</span>
+              <output data-m5-bundled-firmware></output>
+            </p>
+            <pre data-m5-state>No controller response yet.</pre>
+          </details>
+          <div data-m5-parent>
+            <section
+              class="conductor__m5"
+              aria-label="M5 controller"
+              data-copy-aria-label="drawer.m5"
+            >
+              <label class="conductor__m5-label"
+                ><span data-copy="m5.host">M5 host</span>
+                <input type="text" placeholder="bm-station-a-m5.local"></label
+              ><button type="button" data-set-host data-copy="m5.set">
+                Set
+              </button><button
+                type="button"
+                data-clear-host
+                data-copy="m5.clear"
+              >
+                Clear
+              </button>
+              <div class="conductor__m5-preview" hidden>
+                <svg
+                  class="conductor__m5-pad"
+                  viewBox="0 0 100 100"
+                  aria-hidden="true"
+                >
+                  <circle class="conductor__m5-dot" r="7"></circle>
+                </svg><span class="conductor__m5-readout"></span>
+              </div>
+            </section>
+          </div>
+          <a
+            class="conductor__drawer-link"
+            href="./flash.html"
+            target="_blank"
+            rel="noopener"
+            data-copy="drawer.flash"
+            >Flash and set up a controller</a
+          >
+        </div>
+        <div class="conductor__readouts">
+          <span
+            ><span data-copy="readout.m5">M5</span
+            ><output data-reading="m5">—</output></span
+          >
+          <span
+            ><span data-copy="readout.level">Level</span
+            ><output data-reading="level">—</output></span
+          >
+          <span
+            ><span data-copy="readout.audio">Audio</span
+            ><output data-reading="audio">—</output></span
+          >
+          <span
+            ><span data-copy="readout.narration">Narration</span
+            ><output data-reading="language">—</output></span
+          >
+        </div>
+      </dialog>
+      <div class="conductor__wake" hidden>
+        <div class="conductor__wake-identity">
+          <span class="conductor__wake-piece">Becoming Many</span
+          ><span class="conductor__wake-station" hidden></span>
+        </div>
+        <hr class="conductor__wake-rule">
+        <span class="conductor__wake-headline" data-copy="wake.headline"
+          >The station is asleep</span
+        ><span class="conductor__wake-hint" data-copy="wake.hint"
+          >Tap anywhere on this screen.</span
+        ><span class="conductor__wake-pill" data-copy="wake.pill"
+          >Tap to wake</span
+        >
+      </div>
+    </main>
+    <script type="module" src="../entry/conductor.entry.ts"></script>
+  </body>
+</html>

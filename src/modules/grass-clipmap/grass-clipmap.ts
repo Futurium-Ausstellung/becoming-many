@@ -9,7 +9,7 @@ import type { PerspectiveCamera, Scene } from "three";
 import type { UnlitMaterialEffect } from "../../utils/asset-loader/material-effect";
 import type { WorldModule } from "../../world/module-runtime";
 import type { StreamJob, StreamQueue } from "../../world/stream-queue";
-import type { Viewpoint } from "../../world/viewer-rig";
+import type { Viewpoint } from "../../world/viewpoint";
 import type { WorldSurfaceSettings } from "../../world-surface/surface-settings";
 import type { WorldSurface } from "../../world-surface/world-surface";
 import {
@@ -78,12 +78,25 @@ function loadGrassClipmap(
     cameraX: options.viewpoint.worldPosition.x,
     cameraZ: options.viewpoint.worldPosition.z,
   });
-  const field = createGrassClipmapField({
-    preset: options.preset,
+  let field: GrassClipmapField;
+  try {
+    field = createGrassClipmapField({
+      preset: options.preset,
+      heightField,
+      fogColor: options.fogColor,
+      effects: options.effects,
+    });
+  } catch (error) {
+    heightField.dispose();
+    throw error;
+  }
+
+  state.currentResources = {
     heightField,
-    fogColor: options.fogColor,
-    effects: options.effects,
-  });
+    field,
+    refillKey: {},
+    refilling: false,
+  };
 
   field.publishHeightWindow();
   const { worldPosition } = options.viewpoint;
@@ -93,13 +106,6 @@ function loadGrassClipmap(
   // the module lifecycle activates it.
   field.group.visible = false;
   options.scene.add(field.group);
-
-  state.currentResources = {
-    heightField,
-    field,
-    refillKey: {},
-    refilling: false,
-  };
 }
 
 function updateGrassClipmap(

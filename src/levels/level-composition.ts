@@ -1,3 +1,5 @@
+import { START_AUDIO_SETTINGS } from "../modules/start/audio/audio-settings";
+import { createStartAudio } from "../modules/start/audio/start-audio";
 /**
  * Purpose: Construct the concrete module graph for one authored world.
  * Context: Level Runtime needs configured resources without knowing content-module details.
@@ -6,11 +8,19 @@
  */
 
 import type { Matrix4 } from "three";
+import { createDesktopController } from "../control/desktop-controller";
+import { createFlightControl } from "../control/flight-control";
+import type { FlightHeightLimits } from "../control/flight-pose";
+import {
+  keepFlightWithinHeightLimits,
+  resetFlightPose,
+} from "../control/flight-pose";
 import { FLIGHT_SETTINGS } from "../control/flight-settings";
 import { END_CREDITS } from "../dramaturgy/end-credits";
+import { ORGAN_SCORE } from "../dramaturgy/organ-score";
 import type { PassageSchedule } from "../dramaturgy/passage-schedule";
 import type { ShowSense } from "../dramaturgy/show-levels";
-import { createAirParticlesModule } from "../modules/air-particles/air-particles";
+import { createM5Runtime } from "../m5/runtime/m5.runtime";
 import {
   type AnimalPassagesModuleHandle,
   createAnimalPassagesModule,
@@ -19,7 +29,6 @@ import {
 } from "../modules/animal-passages/animal-passages";
 import {
   type AnimalBodiesObserver,
-  type AnimalsModuleHandle,
   createAnimalsModule,
 } from "../modules/animals/animals";
 import { ANIMALS_DEFINITION } from "../modules/animals/animals-definition";
@@ -28,20 +37,14 @@ import {
   createEchoDepth,
   type EchoDepthEffect,
 } from "../modules/echo-depth/echo-depth";
-import {
-  createEndCreditsPanel,
-  type EndCreditsPanelHandle,
-} from "../modules/end-credits/end-credits-panel";
+import { createEndCreditsPanel } from "../modules/end-credits/end-credits-panel";
 import { createGrassClipmapModule } from "../modules/grass-clipmap/grass-clipmap";
 import { getGrassZoneCoverage } from "../modules/grass-clipmap/grass-height-field";
-import {
-  createMagneticSense,
-  type MagneticSenseModuleHandle,
-} from "../modules/magnetic-sense/magnetic-sense";
+import { createMagneticSense } from "../modules/magnetic-sense/magnetic-sense";
 import { BIRD_BODY_ASSET } from "../modules/motion-sense/bird-bodies";
 import {
   createMotionSenseModule,
-  type MotionSenseModuleHandle,
+  type MotionSenseModuleOptions,
 } from "../modules/motion-sense/motion-sense";
 import { createPassageSwarmModule } from "../modules/motion-sense/passage-swarm";
 import {
@@ -58,13 +61,13 @@ import {
   type ScentParticlesParameters,
 } from "../modules/scent-particles/scent-particles";
 import { createSnakesModule } from "../modules/snakes/snakes";
+import { createAirParticlesModule } from "../modules/start/point-cloud/point-cloud.module";
+import { createStartModule } from "../modules/start/start.module";
+import type { StartExperience } from "../modules/start/start-contract";
 import { createGroundOccluder } from "../modules/terrain/ground-occluder";
 import { createTerrainModule } from "../modules/terrain/terrain";
 import { createTerrainColors } from "../modules/terrain/terrain-colors";
-import type {
-  TerrainMaterialEffect,
-  TerrainPresentation,
-} from "../modules/terrain/terrain-geometry";
+import type { TerrainPresentation } from "../modules/terrain/terrain-geometry";
 import {
   createThermalPerception,
   type ThermalPerceptionEffects,
@@ -77,102 +80,109 @@ import {
   createWorldFade,
   type WorldFadeEffect,
 } from "../modules/world-fade/world-fade";
+import { createAudioTimebase } from "../sound/audio-timebase";
+import { createDroneOrgan } from "../sound/drone-organ/drone-organ";
+import { createNarrationPlayer } from "../sound/narration-player";
+import type { VoicePlayback } from "../sound/playback";
+import type { SpatialAudio } from "../sound/spatial-audio";
+import { createSpatialAudio } from "../sound/spatial-audio.runtime";
+import { createVoicePlayer } from "../sound/voice-player";
 import {
-  type GltfAssetRequest,
+  disposeGltfAssets,
   type GltfAssets,
   loadGltfAssets,
 } from "../utils/asset-loader/gltf-assets";
-import type { UnlitMaterialEffect } from "../utils/asset-loader/material-effect";
+import type {
+  TerrainMaterialEffect,
+  UnlitMaterialEffect,
+} from "../utils/asset-loader/material-effect";
 import type { WorldModule } from "../world/module-runtime";
-import { createRigHeadingReader } from "../world/viewer-rig";
-import type { WorldContext } from "../world/world-runtime";
+import {
+  createRigHeadingReader,
+  XR_VIEW_PITCH_ASSIST_DEGREES,
+} from "../world/viewer-rig";
+import type {
+  World,
+  WorldContext,
+  WorldViewport,
+} from "../world/world-contract";
+import { createWorld } from "../world/world-runtime";
 import { WORLD_SURFACE_SETTINGS } from "../world-surface/surface-settings";
 import {
   createWorldSurface,
   type WorldSurface,
 } from "../world-surface/world-surface";
 import { ZONE_SETTINGS } from "../world-surface/zone-settings";
-import type { TerrainPreset, WorldComposition } from "./level-preset";
-import type { ShowWorldReach } from "./show-runtime";
+import type {
+  LevelPreset,
+  TerrainPreset,
+  WorldComposition,
+} from "./level-preset";
+import { createShowRuntime, validateShowRequest } from "./show.runtime";
+import type {
+  ShowRequest,
+  ShowRuntime,
+  ShowRuntimeOptions,
+  ShowWorldReach,
+} from "./show-contract";
 
 export interface LoadedLevelAssets {
   readonly vegetation: GltfAssets;
   readonly rocks: GltfAssets;
   readonly animals: GltfAssets;
+  /** The flock bird model; loaded only for a level that draws bird bodies. */
   readonly birds: GltfAssets;
   /** Passage models and routes; only a show crosses animals, so only a show loads them. */
   readonly passages: PassageResources | undefined;
 }
 
-interface LevelSetup {
-  readonly world: WorldContext;
-  readonly level: WorldComposition;
-  readonly worldSurface: WorldSurface;
+interface LevelCompositionOptions {
+  readonly language?: "en" | "de";
+  readonly readLanguage?: () => "en" | "de" | undefined;
+  readonly world: Pick<
+    WorldContext,
+    "scene" | "camera" | "viewerRig" | "viewpoint" | "streamQueue"
+  >;
+  readonly level: LevelPreset;
   readonly assets: LoadedLevelAssets;
-  readonly materialHazeColor: number;
-  /** Only a show composes world fades; a static run keeps its materials bare. */
   readonly forShow: boolean;
   /** The animals this world crosses, or undefined when none do. */
-  readonly passages: PassageSchedule | undefined;
-  readonly testModules: TestLevelModules | undefined;
-}
-
-type CreateLegacyGrass =
-  typeof import("../modules/grass/grass").createGrassModule;
-type CreateZonePresentation =
-  typeof import("../modules/zone-visualizer/zone-visualizer").createZoneVisualizer;
-
-export interface TestLevelModules {
-  readonly createLegacyGrass?: CreateLegacyGrass;
-  readonly createZonePresentation?: CreateZonePresentation;
-}
-
-interface LevelCompositionOptions {
-  readonly world: WorldContext;
-  readonly level: WorldComposition;
-  readonly assets: LoadedLevelAssets;
-  readonly materialHazeColor: number;
-  readonly forShow: boolean;
-  readonly passages: PassageSchedule | undefined;
-  readonly testModules?: TestLevelModules;
+  readonly passages?: PassageSchedule;
+  readonly signal?: AbortSignal;
+  readonly sharedAudio?: SpatialAudio;
 }
 
 export interface ComposedLevel {
+  readonly tutorial?: StartExperience;
+  readonly audio?: SpatialAudio;
+  readonly voice?: VoicePlayback;
   readonly worldSurface: WorldSurface;
   readonly modules: readonly WorldModule[];
   readonly reach: ShowWorldReach;
   readonly hasGround: boolean;
 }
 
-export function composeLevel(options: LevelCompositionOptions): ComposedLevel {
+export async function composeLevel({
+  language = "en",
+  readLanguage,
+  world,
+  level,
+  assets,
+  forShow,
+  passages: passageSchedule,
+  signal = new AbortController().signal,
+  sharedAudio,
+}: LevelCompositionOptions): Promise<ComposedLevel> {
   const worldSurface = createWorldSurface(
     WORLD_SURFACE_SETTINGS,
     ZONE_SETTINGS,
   );
-  const setup: LevelSetup = {
-    ...options,
-    worldSurface,
-    testModules: options.testModules,
-  };
-  const configured = createConfiguredModules(setup);
-
-  return {
-    worldSurface,
-    modules: configured.modules,
-    reach: configured.reach,
-    hasGround:
-      options.level.invisibleGround === true ||
-      hasVisibleSurface(options.level),
-  };
-}
-
-interface ComposedWorld {
-  readonly modules: readonly WorldModule[];
-  readonly reach: ShowWorldReach;
-}
-
-function createConfiguredModules(setup: LevelSetup): ComposedWorld {
+  let voice: VoicePlayback | undefined;
+  let tutorial: StartExperience | undefined;
+  let audio: SpatialAudio | undefined;
+  let atmosphere: Awaited<ReturnType<typeof createStartAudio>> | undefined;
   const modules: WorldModule[] = [];
+  const createdModules = new Set<WorldModule>();
   const gates = new Map<ShowSense, WorldModule[]>();
   const add = (
     gate: ShowSense | undefined,
@@ -180,6 +190,7 @@ function createConfiguredModules(setup: LevelSetup): ComposedWorld {
   ): void => {
     if (!module) return;
     modules.push(module);
+    createdModules.add(module);
     if (!gate) return;
 
     const gatedModules = gates.get(gate);
@@ -187,387 +198,535 @@ function createConfiguredModules(setup: LevelSetup): ComposedWorld {
     else gates.set(gate, [module]);
   };
 
-  // World fades exist only for a show: a static run never fades, so its
-  // materials skip the extra fragment mix entirely.
-  const structureFade = setup.forShow ? createWorldFade() : undefined;
-  const animalsFade = setup.forShow ? createWorldFade() : undefined;
-  // The credits close a show. A development preset and the benchmark route
-  // never reach an ending, so neither builds the panel or its texture.
-  const endCredits = setup.forShow
-    ? createEndCreditsPanel({
-        scene: setup.world.scene,
-        viewpoint: setup.world.viewpoint,
-        viewerRig: setup.world.viewerRig,
-        viewPitchDegrees: FLIGHT_SETTINGS.viewPitchAssistDegrees,
-        definition: END_CREDITS,
-      })
-    : undefined;
-
-  const echoDepth = createEchoDepthEffect(setup.level);
-  const thermal = createThermalEffects(setup);
-  const magnetic = createMagneticSky(setup);
-  // Scent is created before Animals so the actors can report their bodies
-  // into its trail ring, and it is added before them so it updates first and
-  // the clock their prints are stamped with is already the current one.
-  const scent = createScentParticles(setup);
-  const animals = createAnimals(
-    setup,
-    thermal,
-    animalsFade,
-    scent?.observeActorBodies,
-  );
-  const connections = createConnectionsWeb(setup, animals);
-  const motion = createMotionSense(setup, animalsFade);
-  const passages = createAnimalPassages(setup);
-  const passageSwarm = createPassageSwarm(setup, passages);
-
-  add(
-    "echo",
-    createTerrain(
-      setup,
-      echoDepth,
-      thermal,
-      structureFade,
-      connections?.terrain,
-    ),
-  );
-  add(undefined, createAirParticles(setup));
-  add("scent", scent?.module);
-  add(undefined, createGrass(setup, echoDepth, thermal, structureFade));
-  add(undefined, createGrassClipmap(setup, echoDepth, thermal, structureFade));
-  add("echo", createVegetation(setup, echoDepth, thermal, structureFade));
-  add("echo", createRocks(setup, echoDepth, thermal, structureFade));
-  add("thermal", createSnakes(setup, echoDepth, structureFade));
-  add("thermal", animals?.module);
-  add("motion", motion?.module);
-  add("magnetic", magnetic?.module);
-  add("connections", connections?.module);
-  // Ungated: a passage crosses *between* senses, so no single sense strength
-  // may put it away. The schedule alone decides when its animal is in the air.
-  // The swarm passage is the sharpest case — it announces the very sense whose
-  // gate would otherwise be holding it shut while it crosses.
-  add(undefined, passages?.module);
-  add(undefined, passageSwarm);
-  add(undefined, endCredits?.module);
-
-  return {
-    modules,
-    reach: composeShowReach(gates, {
-      scent,
-      motion,
-      thermal,
-      magnetic,
-      connections,
-      passages,
-      structureFade,
-      animalsFade,
-      endCredits,
-    }),
-  };
-}
-
-/**
- * Everything with a runtime driver, as composed — present when created. Echo
- * is absent by design: its ramp needs no fade because the surfaces it
- * decorates already dissolve through the World Fade, which rides the echo
- * strength itself.
- */
-interface ComposedSenseHandles {
-  readonly scent: ScentParticlesModuleHandle | undefined;
-  readonly motion: MotionSenseModuleHandle | undefined;
-  readonly thermal: ThermalPerceptionEffects | undefined;
-  readonly magnetic: MagneticSenseModuleHandle | undefined;
-  readonly connections: ConnectionsModuleHandle | undefined;
-  readonly passages: AnimalPassagesModuleHandle | undefined;
-  readonly structureFade: WorldFadeEffect | undefined;
-  readonly animalsFade: WorldFadeEffect | undefined;
-  readonly endCredits: EndCreditsPanelHandle | undefined;
-}
-
-function composeShowReach(
-  gates: ReadonlyMap<ShowSense, readonly WorldModule[]>,
-  handles: ComposedSenseHandles,
-): ShowWorldReach {
-  return {
-    gates,
-    senses: {
-      scent: handles.scent?.setIntensity,
-      motion: handles.motion?.setIntensity,
-      thermal: handles.thermal?.setIntensity,
-      magnetic: handles.magnetic?.setIntensity,
-      connections: handles.connections?.setIntensity,
-    },
-    worldFades: {
-      structure: handles.structureFade,
-      animals: handles.animalsFade,
-    },
-    setSkyBackground: handles.magnetic?.setSkyBackground,
-    setEndCreditsPresence: handles.endCredits?.setPresence,
-    setBirdBodyPresence: handles.motion?.setBodyPresence,
-    followPassages: handles.passages?.followShowTime,
-    readMotionActorCenters: handles.motion?.readActorCenters,
-  };
-}
-
-/**
- * Skip the sense entirely at intensity zero so its GPU work never runs. A
- * source class joins the web only when both its preset module block and its
- * connections source entry exist.
- */
-function createConnectionsWeb(
-  setup: LevelSetup,
-  animals: AnimalsModuleHandle | undefined,
-): ConnectionsModuleHandle | undefined {
-  const parameters = setup.level.connections;
-  if (!parameters || parameters.intensity === 0) return undefined;
-
-  const { level, worldSurface } = setup;
-  const staticSources: ConnectionNodeSource[] = [];
-  if (level.vegetation && parameters.sources.vegetation) {
-    staticSources.push(
-      createVegetationConnectionSource(level.vegetation, worldSurface),
-    );
-  }
-  if (level.scentParticles && parameters.sources.scentEmitters) {
-    staticSources.push(
-      createScentConnectionSource(worldSurface.groundYAt, worldSurface.zoneAt),
-    );
-  }
-  if (level.rocks && parameters.sources.rocks) {
-    staticSources.push(createRockConnectionSource(level.rocks, worldSurface));
-  }
-  const animalSource =
-    animals && parameters.sources.animals
-      ? {
-          sourceClass: "animals" as const,
-          getWorldPositions: animals.getVisibleWorldPositions,
-        }
-      : undefined;
-
-  // What already covers this level's ground, straight from the module that
-  // grows it: bare surface everywhere the level authors no grass at all.
-  const groundCoverAt = setup.level.grassClipmap
-    ? (worldX: number, worldZ: number) =>
-        getGrassZoneCoverage(worldSurface, worldX, worldZ)
-    : () => 0;
-
-  return createConnectionsModule(parameters, {
-    scene: setup.world.scene,
-    viewpoint: setup.world.viewpoint,
-    streamQueue: setup.world.streamQueue,
-    worldSurface,
-    staticSources,
-    animalSource,
-    groundCoverAt,
-  });
-}
-
-/** Skip the sense entirely at intensity zero so its GPU work never runs. */
-function createMagneticSky(
-  setup: LevelSetup,
-): MagneticSenseModuleHandle | undefined {
-  const parameters = setup.level.magnetic;
-  if (!parameters || parameters.intensity === 0) return undefined;
-
-  return createMagneticSense(parameters, {
-    scene: setup.world.scene,
-    viewpoint: setup.world.viewpoint,
-    skyHazeColor: setup.materialHazeColor,
-  });
-}
-
-/** Skip the sense entirely at intensity zero so its GPU work never runs. */
-function createThermalEffects(
-  setup: LevelSetup,
-): ThermalPerceptionEffects | undefined {
-  const parameters = setup.level.thermal;
-  if (!parameters || parameters.intensity === 0) return undefined;
-
-  return createThermalPerception(parameters, {
-    surfaceSettings: WORLD_SURFACE_SETTINGS,
-    conditionsAt: setup.worldSurface.zoneConditionsAt,
-  });
-}
-
-/** Skip the sense entirely at intensity zero so its GPU work never runs. */
-function createMotionSense(
-  setup: LevelSetup,
-  animalsFade: WorldFadeEffect | undefined,
-): MotionSenseModuleHandle | undefined {
-  const parameters = setup.level.motion;
-  if (!parameters || parameters.intensity === 0) return undefined;
-
-  // The bodies belong to the warm population rather than to the motion sense:
-  // they ride the animals' World Fade, so a show condenses them out of the
-  // haze with the heat view that reveals them. They circle well beyond that
-  // view's reach, so like an unwarmed animal they keep the echo palette their
-  // color is authored in. The module is handed the whole loaded set rather
-  // than one model out of it, so releasing it stays with the module that
-  // draws from it.
-  const birdBody = hasBirdBodies(setup.level)
-    ? { assets: setup.assets.birds, effects: animalsFade ? [animalsFade] : [] }
-    : undefined;
-
-  return createMotionSenseModule({
-    scene: setup.world.scene,
-    viewpoint: setup.world.viewpoint,
-    parameters,
-    groundYAt: setup.worldSurface.groundYAt,
-    zoneAt: setup.worldSurface.zoneAt,
-    birdBody,
-  });
-}
-
-/**
- * The authored animal crossings. Only a show has them: they are placed by the
- * schedule, and a static run has no show time to place them against.
- */
-function createAnimalPassages(
-  setup: LevelSetup,
-): AnimalPassagesModuleHandle | undefined {
-  const { passages, assets } = setup;
-  if (!passages || !assets.passages) return undefined;
-
-  const { world } = setup;
-  return createAnimalPassagesModule({
-    scene: world.scene,
-    viewpoint: world.viewpoint,
-    worldSurface: setup.worldSurface,
-    schedule: passages,
-    resources: assets.passages,
-    readViewHeadingRadians: createRigHeadingReader(world.viewerRig),
-  });
-}
-
-/**
- * The trail ring of the swarm passage. It is composed here rather than inside
- * Motion Sense because it must outlive that module's gate: the mosquitoes
- * cross six seconds before the motion cue, where the sense they announce still
- * stands at zero. Motion Sense owns how a trail is printed; the passage owns
- * where and when.
- */
-function createPassageSwarm(
-  setup: LevelSetup,
-  passages: AnimalPassagesModuleHandle | undefined,
-): WorldModule | undefined {
-  const swarm = passages?.swarm;
-  // The ring prints in the level's own trail appearance, so a world that
-  // schedules the swarm must also carry the motion layer. `level-presets`
-  // holds the show to that; without it the crossing would go missing quietly.
-  const parameters = setup.level.motion;
-  if (!swarm || !parameters) return undefined;
-
-  return createPassageSwarmModule({
-    scene: setup.world.scene,
-    parameters,
-    pointCount: swarm.pointCount,
-    cloudRadiusMeters: swarm.cloudRadiusMeters,
-    cloudHeightMeters: swarm.cloudHeightMeters,
-    readCrossing: swarm.read,
-  });
-}
-
-/** Skip the sense entirely at intensity zero so its GPU work never runs. */
-function createEchoDepthEffect(
-  level: WorldComposition,
-): EchoDepthEffect | undefined {
-  const parameters = level.echoDepth;
-  if (!parameters || parameters.intensity === 0) return undefined;
-  return createEchoDepth(parameters);
-}
-
-function createTerrain(
-  setup: LevelSetup,
-  echoDepth: EchoDepthEffect | undefined,
-  thermal: ThermalPerceptionEffects | undefined,
-  worldFade: WorldFadeEffect | undefined,
-  soilOpening: TerrainMaterialEffect | undefined,
-): WorldModule | undefined {
-  const preset = setup.level.terrain;
-  // A level that keeps its surface invisible still needs it to hide what
-  // stands behind a hill. The occluder writes depth and no color, carries no
-  // effects because it is never seen, and is coarse because it only has to
-  // hold ridges and valley edges.
-  if (!preset) {
-    return setup.level.invisibleGround
-      ? createTerrainModule({
-          scene: setup.world.scene,
-          viewpoint: setup.world.viewpoint,
-          worldSurface: setup.worldSurface,
-          streamQueue: setup.world.streamQueue,
-          parameters: { opacity: 1 },
-          presentation: createGroundOccluder(),
+  try {
+    if (level.flightGuidance && !forShow) {
+      audio = sharedAudio ?? (await createSpatialAudio(world.camera, signal));
+      atmosphere = await createStartAudio({
+        ...audio,
+        settings: START_AUDIO_SETTINGS,
+        signal,
+      });
+      signal.throwIfAborted();
+    }
+    // World fades exist only for a show: a static run never fades, so its
+    // materials skip the extra fragment mix entirely.
+    const structureFade = forShow ? createWorldFade() : undefined;
+    const animalsFade = forShow ? createWorldFade() : undefined;
+    // The credits close a show. Development presets never reach an ending,
+    // so they do not build the panel or its texture.
+    const endCredits = forShow
+      ? createEndCreditsPanel({
+          scene: world.scene,
+          viewpoint: world.viewpoint,
+          definition: END_CREDITS,
         })
       : undefined;
+
+    if (endCredits) createdModules.add(endCredits.module);
+
+    // Zero intensity omits the sense entirely, including its GPU resources.
+    const echoDepth =
+      level.echoDepth && level.echoDepth.intensity !== 0
+        ? createEchoDepth(level.echoDepth)
+        : undefined;
+    const thermal =
+      level.thermal && level.thermal.intensity !== 0
+        ? createThermalPerception(level.thermal, {
+            surfaceSettings: WORLD_SURFACE_SETTINGS,
+            conditionsAt: worldSurface.zoneConditionsAt,
+          })
+        : undefined;
+    const magnetic =
+      level.magnetic && level.magnetic.intensity !== 0
+        ? createMagneticSense(level.magnetic, {
+            scene: world.scene,
+            viewpoint: world.viewpoint,
+            skyHazeColor: level.backgroundColor,
+          })
+        : undefined;
+    if (magnetic) createdModules.add(magnetic.module);
+    // Scent is created before Animals so the actors can report their bodies
+    // into its trail ring, and it is added before them so it updates first and
+    // the clock their prints are stamped with is already the current one.
+    const scent = createScentParticles();
+    if (scent) createdModules.add(scent.module);
+    const animals = createAnimals(
+      thermal,
+      animalsFade,
+      scent?.observeActorBodies,
+    );
+    if (animals) createdModules.add(animals);
+    const connections = createConnectionsWeb();
+    if (connections) createdModules.add(connections.module);
+    const motion =
+      level.motion && level.motion.intensity !== 0
+        ? createMotionSenseModule({
+            scene: world.scene,
+            viewpoint: world.viewpoint,
+            parameters: level.motion,
+            groundYAt: worldSurface.groundYAt,
+            zoneAt: worldSurface.zoneAt,
+            birdBody: readBirdBody(animalsFade),
+          })
+        : undefined;
+    if (motion) createdModules.add(motion.module);
+    const passages = createAnimalPassages();
+    if (passages) createdModules.add(passages.module);
+    const passageSwarm = createPassageSwarm(passages);
+    if (passageSwarm) createdModules.add(passageSwarm);
+
+    add(
+      "echo",
+      await createTerrain(
+        echoDepth,
+        thermal,
+        structureFade,
+        connections?.terrain,
+      ),
+    );
+    add(undefined, createAirParticles());
+    add("scent", scent?.module);
+    add(undefined, createGrassClipmap(echoDepth, thermal, structureFade));
+    add("echo", createVegetation(echoDepth, thermal, structureFade));
+    add("echo", createRocks(echoDepth, thermal, structureFade));
+    add("thermal", createSnakes(echoDepth, structureFade));
+    add("thermal", animals);
+    add("motion", motion?.module);
+    add("magnetic", magnetic?.module);
+    add("connections", connections?.module);
+    // Ungated: a passage crosses *between* senses, so no single sense strength
+    // may put it away. The schedule alone decides when its animal is in the air.
+    // The swarm passage is the sharpest case — it announces the very sense whose
+    // gate would otherwise be holding it shut while it crosses.
+    add(undefined, passages?.module);
+    add(undefined, passageSwarm);
+    add(undefined, endCredits?.module);
+    return {
+      worldSurface,
+      voice,
+      tutorial,
+      audio,
+      modules,
+      hasGround: level.invisibleGround === true || hasVisibleSurface(level),
+      reach: {
+        gates,
+        // Echo surfaces already dissolve through their world fade.
+        senses: {
+          scent: scent?.setIntensity,
+          motion: motion?.setIntensity,
+          // Heat is what reveals a warm body, so the flock bodies follow the
+          // thermal strength while the flight itself stays the motion sense's.
+          thermal: composeSenseDrivers(
+            thermal?.setIntensity,
+            motion?.setBodyPresence,
+          ),
+          magnetic: magnetic?.setIntensity,
+          connections: connections?.setIntensity,
+        },
+        worldFades: { structure: structureFade, animals: animalsFade },
+        setSkyBackground: magnetic?.setSkyBackground,
+        setEndCreditsPresence: endCredits?.setPresence,
+        followPassages: passages?.followShowTime,
+        readMotionActorCenters: motion?.readActorCenters,
+      },
+    };
+  } catch (error) {
+    const errors: unknown[] = [error];
+    try {
+      voice?.unload();
+    } catch (cleanupError) {
+      errors.push(cleanupError);
+    }
+    for (const module of [...createdModules].reverse()) {
+      try {
+        module.unload();
+      } catch (cleanupError) {
+        errors.push(cleanupError);
+      }
+    }
+    try {
+      atmosphere?.unload();
+      if (!sharedAudio) await audio?.unload();
+    } catch (cleanupError) {
+      errors.push(cleanupError);
+    }
+    if (errors.length > 1)
+      throw new AggregateError(
+        errors,
+        "Composition construction and cleanup failed",
+      );
+    throw error;
   }
 
-  const presentation = createTerrainPresentation(preset, setup);
-  // The first-applied effect executes last and wins the final color (see
-  // material-shader-patch): the world fade dissolves the finished surface
-  // into the background, thermal covers everything inside its radius, and
-  // the echo ramp carries the ground outside it. The magnetic sense never
-  // touches the terrain; it lives on the sky dome.
-  const effects: TerrainMaterialEffect[] = [];
-  if (worldFade) effects.push(worldFade);
-  if (thermal) effects.push(thermal.terrain);
-  if (echoDepth) effects.push(echoDepth);
-  // Pushed last so it executes first: it only scales the alpha the carried
-  // ramps then paint into, and it wins nothing by running after them.
-  if (soilOpening) effects.push(soilOpening);
+  /**
+   * Skip the sense entirely at intensity zero so its GPU work never runs. A
+   * source class joins the web only when both its preset module block and its
+   * connections source entry exist.
+   */
+  function createConnectionsWeb(): ConnectionsModuleHandle | undefined {
+    const parameters = level.connections;
+    if (!parameters || parameters.intensity === 0) return undefined;
 
-  return createTerrainModule({
-    scene: setup.world.scene,
-    viewpoint: setup.world.viewpoint,
-    worldSurface: setup.worldSurface,
-    streamQueue: setup.world.streamQueue,
-    parameters: { opacity: preset.opacity },
-    presentation,
-    effects,
-  });
-}
+    const staticSources: ConnectionNodeSource[] = [];
+    if (level.vegetation && parameters.sources.vegetation) {
+      staticSources.push(
+        createVegetationConnectionSource(level.vegetation, worldSurface),
+      );
+    }
+    if (level.scentParticles && parameters.sources.scentEmitters) {
+      staticSources.push(
+        createScentConnectionSource(
+          worldSurface.groundYAt,
+          worldSurface.zoneAt,
+        ),
+      );
+    }
+    if (level.rocks && parameters.sources.rocks) {
+      staticSources.push(createRockConnectionSource(level.rocks, worldSurface));
+    }
+    // What already covers this level's ground, straight from the module that
+    // grows it: bare surface everywhere the level authors no grass at all.
+    const groundCoverAt = level.grassClipmap
+      ? (worldX: number, worldZ: number) =>
+          getGrassZoneCoverage(worldSurface, worldX, worldZ)
+      : () => 0;
 
-function createAirParticles(setup: LevelSetup): WorldModule | undefined {
-  const parameters = setup.level.airParticles;
-  if (!parameters) return undefined;
+    return createConnectionsModule(parameters, {
+      scene: world.scene,
+      viewpoint: world.viewpoint,
+      streamQueue: world.streamQueue,
+      worldSurface,
+      staticSources,
+      groundCoverAt,
+    });
+  }
 
-  const surfaceYAt = hasVisibleSurface(setup.level)
-    ? setup.worldSurface.surfaceYAt
-    : undefined;
+  /** The flock bird model and the fade it follows, for a level that draws it. */
+  function readBirdBody(
+    animalsFade: UnlitMaterialEffect | undefined,
+  ): MotionSenseModuleOptions["birdBody"] {
+    if (!hasBirdBodies(level)) return undefined;
 
-  return createAirParticlesModule({
-    scene: setup.world.scene,
-    viewpoint: setup.world.viewpoint,
-    parameters,
-    streamQueue: setup.world.streamQueue,
-    surfaceYAt,
-  });
-}
+    const asset = assets.birds.get(BIRD_BODY_ASSET.id);
+    if (!asset) throw new Error("The flock bird model was not loaded");
+    return { asset, effects: animalsFade ? [animalsFade] : [] };
+  }
 
-/**
- * Scent has no positions of its own: it radiates from the plants the level
- * grows, rendered or not, and from the animals it carries.
- */
-function createScentParticles(
-  setup: LevelSetup,
-): ScentParticlesModuleHandle | undefined {
-  const parameters = setup.level.scentParticles;
-  if (!parameters) return undefined;
+  /**
+   * The authored animal crossings. Only a show names them: they are placed by
+   * the schedule, and a static run has no show time to place them against.
+   */
+  function createAnimalPassages(): AnimalPassagesModuleHandle | undefined {
+    const resources = assets.passages;
+    if (!passageSchedule || !resources) return undefined;
 
-  const { level, worldSurface } = setup;
-  const plantPreset = level.vegetation ?? level.invisibleVegetation;
-  const hasAnimals = Boolean(level.animals && parameters.animals);
-  if (hasAnimals) validateAnimalScentSignatures(parameters);
+    return createAnimalPassagesModule({
+      scene: world.scene,
+      viewpoint: world.viewpoint,
+      worldSurface,
+      schedule: passageSchedule,
+      resources,
+      // The rig's yaw is where the visitor is travelling, which is what a route
+      // entering behind them is turned against. The camera under it is head
+      // pose and would swing the whole route with a glance.
+      readViewHeadingRadians: createRigHeadingReader(world.viewerRig),
+    });
+  }
 
-  return createScentParticlesModule({
-    scene: setup.world.scene,
-    viewpoint: setup.world.viewpoint,
-    parameters,
-    streamQueue: setup.world.streamQueue,
-    plantSource: plantPreset
-      ? createVegetationScentSource(plantPreset, worldSurface)
-      : undefined,
-    maxActorCount: hasAnimals ? ANIMALS_DEFINITION.maxVisible : 0,
-  });
+  /**
+   * The trail ring of the swarm passage. It is composed here rather than inside
+   * Motion Sense because it must outlive that module's gate: the mosquitoes
+   * cross six seconds before the motion cue, where the sense they announce still
+   * stands at zero. Motion Sense owns how a trail is printed; the passage owns
+   * where and when.
+   */
+  function createPassageSwarm(
+    passages: AnimalPassagesModuleHandle | undefined,
+  ): WorldModule | undefined {
+    const swarm = passages?.swarm;
+    // The ring prints in the level's own trail appearance, so a world that
+    // schedules the swarm must also carry the motion layer. `level-presets`
+    // holds the show to that; without it the crossing would go missing quietly.
+    const parameters = level.motion;
+    if (!swarm || !parameters) return undefined;
+
+    return createPassageSwarmModule({
+      scene: world.scene,
+      parameters,
+      pointCount: swarm.pointCount,
+      cloudRadiusMeters: swarm.cloudRadiusMeters,
+      cloudHeightMeters: swarm.cloudHeightMeters,
+      readCrossing: swarm.read,
+    });
+  }
+
+  async function createTerrain(
+    echoDepth: EchoDepthEffect | undefined,
+    thermal: ThermalPerceptionEffects | undefined,
+    worldFade: WorldFadeEffect | undefined,
+    soilOpening: TerrainMaterialEffect | undefined,
+  ): Promise<WorldModule | undefined> {
+    const preset = level.terrain;
+    // A level that keeps its surface invisible still needs it to hide what
+    // stands behind a hill. The occluder writes depth and no color, carries no
+    // effects because it is never seen, and is coarse because it only has to
+    // hold ridges and valley edges.
+    if (!preset) {
+      return level.invisibleGround
+        ? createTerrainModule({
+            scene: world.scene,
+            viewpoint: world.viewpoint,
+            worldSurface,
+            streamQueue: world.streamQueue,
+            parameters: { opacity: 1 },
+            presentation: createGroundOccluder(),
+          })
+        : undefined;
+    }
+
+    const presentation = await createTerrainPresentation(preset);
+    // The first-applied effect executes last and wins the final color (see
+    // material-shader-patch): the world fade dissolves the finished surface
+    // into the background, thermal covers everything inside its radius, and
+    // the echo ramp carries the ground outside it. The magnetic sense never
+    // touches the terrain; it lives on the sky dome.
+    const effects: TerrainMaterialEffect[] = [];
+    if (worldFade) effects.push(worldFade);
+    if (thermal) effects.push(thermal.terrain);
+    if (echoDepth) effects.push(echoDepth);
+    // Pushed last so it executes first: it only scales the alpha the carried
+    // ramps then paint into, and it wins nothing by running after them.
+    if (soilOpening) effects.push(soilOpening);
+
+    return createTerrainModule({
+      scene: world.scene,
+      viewpoint: world.viewpoint,
+      worldSurface,
+      streamQueue: world.streamQueue,
+      parameters: { opacity: preset.opacity },
+      presentation,
+      effects,
+    });
+  }
+
+  function createAirParticles(): WorldModule | undefined {
+    const parameters = level.airParticles;
+    if (!parameters) return undefined;
+
+    const surfaceYAt = hasVisibleSurface(level)
+      ? worldSurface.surfaceYAt
+      : undefined;
+
+    const options = {
+      scene: world.scene,
+      viewpoint: world.viewpoint,
+      parameters,
+      streamQueue: world.streamQueue,
+      surfaceYAt,
+    };
+    const heightLimits = {
+      minimumGroundClearanceMeters:
+        hasVisibleSurface(level) || level.invisibleGround
+          ? FLIGHT_SETTINGS.minimumGroundClearanceMeters
+          : undefined,
+      maximumGroundClearanceMeters: level.maximumGroundClearanceMeters,
+    };
+    if (level.flightGuidance && !forShow)
+      voice = createVoicePlayer({ gestures: window });
+    if (!level.flightGuidance) return createAirParticlesModule(options);
+    tutorial = createStartModule({
+      language,
+      readLanguage,
+      voice,
+      atmosphere,
+      ...options,
+      guidance: level.flightGuidance,
+      constrainFlightPosition: (position) =>
+        keepFlightWithinHeightLimits(
+          position,
+          worldSurface.groundYAt,
+          heightLimits,
+        ),
+    });
+    return tutorial;
+  }
+
+  /**
+   * Scent has no positions of its own: it radiates from the plants the level
+   * grows, rendered or not, and from the animals it carries.
+   */
+  function createScentParticles(): ScentParticlesModuleHandle | undefined {
+    const parameters = level.scentParticles;
+    if (!parameters) return undefined;
+
+    const plantPreset = level.vegetation ?? level.invisibleVegetation;
+    const hasAnimals = Boolean(level.animals && parameters.animals);
+    if (hasAnimals) validateAnimalScentSignatures(parameters);
+
+    return createScentParticlesModule({
+      scene: world.scene,
+      viewpoint: world.viewpoint,
+      parameters,
+      streamQueue: world.streamQueue,
+      plantSource: plantPreset
+        ? createVegetationScentSource(plantPreset, worldSurface)
+        : undefined,
+      maxActorCount: hasAnimals ? ANIMALS_DEFINITION.maxVisible : 0,
+    });
+  }
+
+  /** Skip the field entirely when a level authors no clipmap grass. */
+  function createGrassClipmap(
+    echoDepth: EchoDepthEffect | undefined,
+    thermal: ThermalPerceptionEffects | undefined,
+    worldFade: WorldFadeEffect | undefined,
+  ): WorldModule | undefined {
+    const preset = level.grassClipmap;
+    if (!preset) return undefined;
+
+    return createGrassClipmapModule({
+      scene: world.scene,
+      viewpoint: world.viewpoint,
+      frustumCamera: world.camera,
+      preset,
+      streamQueue: world.streamQueue,
+      worldSurface,
+      surfaceSettings: WORLD_SURFACE_SETTINGS,
+      // The field fades into the level haze wherever no sense covers it.
+      fogColor: level.backgroundColor,
+      // Grass takes its own heat response, not vegetation's. It grows out of
+      // the ground and holds the ground's temperature; carrying the bushes'
+      // values made a whole meadow read as one flat hot surface.
+      effects: buildSurfaceEffects(worldFade, thermal?.grass, echoDepth),
+    });
+  }
+
+  function createVegetation(
+    echoDepth: EchoDepthEffect | undefined,
+    thermal: ThermalPerceptionEffects | undefined,
+    worldFade: WorldFadeEffect | undefined,
+  ): WorldModule | undefined {
+    const preset = level.vegetation;
+    if (!preset) return undefined;
+
+    return createVegetationModule({
+      scene: world.scene,
+      viewpoint: world.viewpoint,
+      preset,
+      assets: assets.vegetation,
+      streamQueue: world.streamQueue,
+      worldSurface,
+      // Asked per stature: heat reads a bush as its own substance, nearer the
+      // meadow it stands in than the wood above it, because a plant sheds its
+      // warmth over its own metres and a bush has too few to shed any. Every
+      // other sense answers the same for both.
+      effectsFor: (stature) =>
+        buildSurfaceEffects(
+          worldFade,
+          stature === "undergrowth"
+            ? thermal?.undergrowth
+            : thermal?.vegetation,
+          echoDepth,
+        ),
+    });
+  }
+
+  /**
+   * Snakes join the world at the Thermal cue, beside the walking population.
+   * A cold body is the one thing a heat view would not show, so this is a
+   * dramaturgical placement rather than a physical one: it is where the piece
+   * wants them, and the ground they cross still colours them like the rocks.
+   */
+  function createSnakes(
+    echoDepth: EchoDepthEffect | undefined,
+    worldFade: WorldFadeEffect | undefined,
+  ): WorldModule | undefined {
+    const preset = level.snakes;
+    if (!preset) return undefined;
+
+    return createSnakesModule({
+      scene: world.scene,
+      viewpoint: world.viewpoint,
+      preset,
+      worldSurface,
+      streamQueue: world.streamQueue,
+      effects: buildSurfaceEffects(worldFade, undefined, echoDepth),
+    });
+  }
+
+  function createRocks(
+    echoDepth: EchoDepthEffect | undefined,
+    thermal: ThermalPerceptionEffects | undefined,
+    worldFade: WorldFadeEffect | undefined,
+  ): WorldModule | undefined {
+    const preset = level.rocks;
+    if (!preset) return undefined;
+
+    return createRocksModule({
+      scene: world.scene,
+      viewpoint: world.viewpoint,
+      preset,
+      assets: assets.rocks,
+      streamQueue: world.streamQueue,
+      worldSurface,
+      effects: buildSurfaceEffects(worldFade, thermal?.rocks, echoDepth),
+    });
+  }
+
+  function createAnimals(
+    thermal: ThermalPerceptionEffects | undefined,
+    worldFade: WorldFadeEffect | undefined,
+    scentActors: AnimalBodiesObserver | undefined,
+  ): WorldModule | undefined {
+    if (!level.animals) return undefined;
+
+    // One effect per animated mesh: the body matrix lets the heat view fall
+    // off from each actor's own core instead of coloring it uniformly. The
+    // world fade goes first so it wins the final color over the heat view.
+    const effectsFor =
+      thermal || worldFade
+        ? (bodyMatrix: Matrix4): readonly UnlitMaterialEffect[] =>
+            [worldFade, thermal?.animals(bodyMatrix)].filter(
+              (effect): effect is UnlitMaterialEffect => effect !== undefined,
+            )
+        : undefined;
+
+    return createAnimalsModule({
+      scene: world.scene,
+      viewpoint: world.viewpoint,
+      definition: ANIMALS_DEFINITION,
+      preset: level.animals,
+      assets: assets.animals,
+      worldSurface,
+      effectsFor,
+      // Warm bodies radiate onto the ground, plants, and rocks around them, and
+      // they leave scent where they walk, so both senses need to know where
+      // the actors stand each frame.
+      onBodiesUpdated: composeBodyObservers(
+        thermal?.setHeatSources,
+        scentActors,
+      ),
+    });
+  }
+
+  async function createTerrainPresentation(
+    preset: TerrainPreset,
+  ): Promise<TerrainPresentation | undefined> {
+    if (preset.presentation === "zones") {
+      const { createZoneVisualizer: createZonePresentation } = await import(
+        "../modules/zone-visualizer/zone-visualizer"
+      );
+      return createZonePresentation(worldSurface, ZONE_SETTINGS);
+    }
+    if (preset.colors) {
+      return createTerrainColors(
+        preset.colors,
+        WORLD_SURFACE_SETTINGS,
+        worldSurface,
+      );
+    }
+    return undefined;
+  }
 }
 
 /** A species without a signature would walk through the world unscented. */
@@ -580,132 +739,6 @@ function validateAnimalScentSignatures(
     if (signatures[id]) continue;
     throw new Error(`Animal species has no scent signature: ${id}`);
   }
-}
-
-/** Skip the field entirely when a level authors no clipmap grass. */
-function createGrassClipmap(
-  setup: LevelSetup,
-  echoDepth: EchoDepthEffect | undefined,
-  thermal: ThermalPerceptionEffects | undefined,
-  worldFade: WorldFadeEffect | undefined,
-): WorldModule | undefined {
-  const preset = setup.level.grassClipmap;
-  if (!preset) return undefined;
-
-  return createGrassClipmapModule({
-    scene: setup.world.scene,
-    viewpoint: setup.world.viewpoint,
-    frustumCamera: setup.world.camera,
-    preset,
-    streamQueue: setup.world.streamQueue,
-    worldSurface: setup.worldSurface,
-    surfaceSettings: WORLD_SURFACE_SETTINGS,
-    // The field fades into the level haze wherever no sense covers it.
-    fogColor: setup.materialHazeColor,
-    // Grass takes its own heat response, not vegetation's. It grows out of
-    // the ground and holds the ground's temperature; carrying the bushes'
-    // values made a whole meadow read as one flat hot surface.
-    effects: buildSurfaceEffects(worldFade, thermal?.grass, echoDepth),
-  });
-}
-
-function createGrass(
-  setup: LevelSetup,
-  echoDepth: EchoDepthEffect | undefined,
-  thermal: ThermalPerceptionEffects | undefined,
-  worldFade: WorldFadeEffect | undefined,
-): WorldModule | undefined {
-  const preset = setup.level.grass;
-  if (!preset) return undefined;
-
-  const createLegacyGrass = setup.testModules?.createLegacyGrass;
-  if (!createLegacyGrass) throw new Error("Legacy Grass module was not loaded");
-
-  return createLegacyGrass({
-    scene: setup.world.scene,
-    viewpoint: setup.world.viewpoint,
-    preset,
-    streamQueue: setup.world.streamQueue,
-    worldSurface: setup.worldSurface,
-    // Grass takes the vegetation heat response: it is the same living plant
-    // matter, growing between the bushes that carry those values, and a
-    // meadow that ran cooler than the shrubs standing in it would read as a
-    // different substance.
-    effects: buildSurfaceEffects(worldFade, thermal?.vegetation, echoDepth),
-  });
-}
-
-function createVegetation(
-  setup: LevelSetup,
-  echoDepth: EchoDepthEffect | undefined,
-  thermal: ThermalPerceptionEffects | undefined,
-  worldFade: WorldFadeEffect | undefined,
-): WorldModule | undefined {
-  const preset = setup.level.vegetation;
-  if (!preset) return undefined;
-
-  return createVegetationModule({
-    scene: setup.world.scene,
-    viewpoint: setup.world.viewpoint,
-    preset,
-    assets: setup.assets.vegetation,
-    streamQueue: setup.world.streamQueue,
-    worldSurface: setup.worldSurface,
-    // Asked per stature: heat reads a bush as its own substance, nearer the
-    // meadow it stands in than the wood above it, because a plant sheds its
-    // warmth over its own metres and a bush has too few to shed any. Every
-    // other sense answers the same for both.
-    effectsFor: (stature) =>
-      buildSurfaceEffects(
-        worldFade,
-        stature === "undergrowth" ? thermal?.undergrowth : thermal?.vegetation,
-        echoDepth,
-      ),
-  });
-}
-
-/**
- * Snakes join the world at the Thermal cue, beside the walking population.
- * A cold body is the one thing a heat view would not show, so this is a
- * dramaturgical placement rather than a physical one: it is where the piece
- * wants them, and the ground they cross still colours them like the rocks.
- */
-function createSnakes(
-  setup: LevelSetup,
-  echoDepth: EchoDepthEffect | undefined,
-  worldFade: WorldFadeEffect | undefined,
-): WorldModule | undefined {
-  const preset = setup.level.snakes;
-  if (!preset) return undefined;
-
-  return createSnakesModule({
-    scene: setup.world.scene,
-    viewpoint: setup.world.viewpoint,
-    preset,
-    worldSurface: setup.worldSurface,
-    streamQueue: setup.world.streamQueue,
-    effects: buildSurfaceEffects(worldFade, undefined, echoDepth),
-  });
-}
-
-function createRocks(
-  setup: LevelSetup,
-  echoDepth: EchoDepthEffect | undefined,
-  thermal: ThermalPerceptionEffects | undefined,
-  worldFade: WorldFadeEffect | undefined,
-): WorldModule | undefined {
-  const preset = setup.level.rocks;
-  if (!preset) return undefined;
-
-  return createRocksModule({
-    scene: setup.world.scene,
-    viewpoint: setup.world.viewpoint,
-    preset,
-    assets: setup.assets.rocks,
-    streamQueue: setup.world.streamQueue,
-    worldSurface: setup.worldSurface,
-    effects: buildSurfaceEffects(worldFade, thermal?.rocks, echoDepth),
-  });
 }
 
 /** Order thermal before echo so it wins the color (first-applied wins). */
@@ -721,38 +754,27 @@ function buildSurfaceEffects(
   return effects.length > 0 ? effects : undefined;
 }
 
-function createAnimals(
-  setup: LevelSetup,
-  thermal: ThermalPerceptionEffects | undefined,
-  worldFade: WorldFadeEffect | undefined,
-  scentActors: AnimalBodiesObserver | undefined,
-): AnimalsModuleHandle | undefined {
-  if (!setup.level.animals) return undefined;
+/** Drive several receivers of one sense strength from its single driver. */
+function composeSenseDrivers(
+  ...drivers: readonly (((intensity: number) => void) | undefined)[]
+): ((intensity: number) => void) | undefined {
+  const configured = drivers.filter(
+    (driver): driver is (intensity: number) => void => driver !== undefined,
+  );
+  if (configured.length <= 1) return configured[0];
 
-  // One effect per animated mesh: the body matrix lets the heat view fall
-  // off from each actor's own core instead of coloring it uniformly. The
-  // world fade goes first so it wins the final color over the heat view.
-  const effectsFor =
-    thermal || worldFade
-      ? (bodyMatrix: Matrix4): readonly UnlitMaterialEffect[] =>
-          [worldFade, thermal?.animals(bodyMatrix)].filter(
-            (effect): effect is UnlitMaterialEffect => effect !== undefined,
-          )
-      : undefined;
+  return (intensity) => {
+    for (const drive of configured) drive(intensity);
+  };
+}
 
-  return createAnimalsModule({
-    scene: setup.world.scene,
-    viewpoint: setup.world.viewpoint,
-    definition: ANIMALS_DEFINITION,
-    preset: setup.level.animals,
-    assets: setup.assets.animals,
-    worldSurface: setup.worldSurface,
-    effectsFor,
-    // Warm bodies radiate onto the ground, plants, and rocks around them, and
-    // they leave scent where they walk, so both senses need to know where
-    // the actors stand each frame.
-    onBodiesUpdated: composeBodyObservers(thermal?.setHeatSources, scentActors),
-  });
+/**
+ * Whether this level draws bird bodies at all. One answer for both the load
+ * and the construction, so a model is never loaded that nothing draws.
+ */
+function hasBirdBodies(level: WorldComposition): boolean {
+  const motion = level.motion;
+  return Boolean(motion && motion.intensity !== 0 && motion.birds?.body);
 }
 
 /** Report one reused body array to every sense that asked for it. */
@@ -769,31 +791,10 @@ function composeBodyObservers(
   };
 }
 
-function createTerrainPresentation(
-  preset: TerrainPreset,
-  setup: LevelSetup,
-): TerrainPresentation | undefined {
-  if (preset.presentation === "zones") {
-    const createZonePresentation = setup.testModules?.createZonePresentation;
-    if (!createZonePresentation) {
-      throw new Error("Zone Visualizer module was not loaded");
-    }
-    return createZonePresentation(setup.worldSurface, ZONE_SETTINGS);
-  }
-  if (preset.colors) {
-    return createTerrainColors(
-      preset.colors,
-      WORLD_SURFACE_SETTINGS,
-      setup.worldSurface,
-    );
-  }
-  return undefined;
-}
-
 function hasVisibleSurface(level: WorldComposition): boolean {
   return Boolean(
     level.terrain ||
-      level.grass ||
+      level.grassClipmap ||
       level.vegetation ||
       level.rocks ||
       level.animals,
@@ -803,40 +804,169 @@ function hasVisibleSurface(level: WorldComposition): boolean {
 export async function loadLevelAssets(
   level: WorldComposition,
   passageSchedule: PassageSchedule | undefined,
+  signal?: AbortSignal,
 ): Promise<LoadedLevelAssets> {
-  const [vegetation, rocks, animals, birds, passages] = await Promise.all([
-    loadGltfAssets(
-      level.vegetation
-        ? createStaticAssetRequests(VEGETATION_DEFINITION.assets)
-        : [],
-    ),
-    loadGltfAssets(
-      level.rocks ? createStaticAssetRequests(ROCKS_DEFINITION.assets) : [],
-    ),
-    loadGltfAssets(
-      level.animals
-        ? createStaticAssetRequests(ANIMALS_DEFINITION.species)
-        : [],
-    ),
-    loadGltfAssets(hasBirdBodies(level) ? [BIRD_BODY_ASSET] : []),
-    passageSchedule ? loadPassageResources(passageSchedule) : undefined,
-  ]);
+  const [vegetation, rocks, animals, birds, passages] =
+    await Promise.allSettled([
+      loadGltfAssets(
+        level.vegetation ? VEGETATION_DEFINITION.assets : [],
+        signal,
+      ),
+      loadGltfAssets(level.rocks ? ROCKS_DEFINITION.assets : [], signal),
+      loadGltfAssets(level.animals ? ANIMALS_DEFINITION.species : [], signal),
+      loadGltfAssets(hasBirdBodies(level) ? [BIRD_BODY_ASSET] : [], signal),
+      passageSchedule
+        ? loadPassageResources(passageSchedule, signal)
+        : undefined,
+    ]);
 
-  return { vegetation, rocks, animals, birds, passages };
+  if (
+    vegetation.status === "rejected" ||
+    rocks.status === "rejected" ||
+    animals.status === "rejected" ||
+    birds.status === "rejected" ||
+    passages.status === "rejected" ||
+    signal?.aborted
+  ) {
+    const errors: unknown[] = [
+      ...[vegetation, rocks, animals, birds, passages].flatMap((result) =>
+        result.status === "rejected" ? [result.reason] : [],
+      ),
+      ...(signal?.aborted ? [signal.reason] : []),
+    ];
+    const sources = [vegetation, rocks, animals, birds].flatMap((result) =>
+      result.status === "fulfilled" ? [result.value] : [],
+    );
+    if (passages.status === "fulfilled" && passages.value)
+      sources.push(passages.value.models);
+    for (const batch of sources) {
+      try {
+        disposeGltfAssets(batch);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (signal?.aborted && errors.every((error) => error === signal.reason))
+      throw signal.reason;
+    throw new AggregateError(errors, "Level assets failed to load");
+  }
+  return {
+    vegetation: vegetation.value,
+    rocks: rocks.value,
+    animals: animals.value,
+    birds: birds.value,
+    passages: passages.value,
+  };
 }
 
-/**
- * Whether this level draws bird bodies at all. One answer for both the load
- * and the composition: a model loaded for a sense that is never built would
- * have no owner left to release it.
- */
-function hasBirdBodies(level: WorldComposition): boolean {
-  const motion = level.motion;
-  return Boolean(motion && motion.intensity !== 0 && motion.birds?.body);
+/** Construct the renderer with the experience's fixed parent pitch assistance. */
+export function composeWorld(surface: WorldViewport): World {
+  return createWorld(surface, {
+    xrViewPitchAssistDegrees: XR_VIEW_PITCH_ASSIST_DEGREES,
+  });
 }
 
-function createStaticAssetRequests(
-  assets: readonly { readonly id: string; readonly url: string }[],
-): GltfAssetRequest[] {
-  return assets.map(({ id, url }) => ({ id, url }));
+/** Bind input owners to the rig and release unpublished resources after failure. */
+export function composeControls(
+  world: World,
+  surface: Pick<WorldSurface, "groundYAt">,
+) {
+  const m5 = createM5Runtime();
+  let desktop: ReturnType<typeof createDesktopController> | undefined;
+  try {
+    desktop = createDesktopController(world.camera, world.renderer.domElement);
+    return {
+      ...composeRigCommands(world, surface.groundYAt),
+      m5,
+      desktop,
+      flight: createFlightControl(world.viewerRig, [m5, desktop]),
+    };
+  } catch (error) {
+    void desktop?.unload();
+    m5.unload();
+    throw error;
+  }
+}
+
+/** Bind pure locomotion operations once; Run supplies the active numerical limits. */
+function composeRigCommands(
+  world: World,
+  groundYAt: (x: number, z: number) => number,
+) {
+  return {
+    resetRig: () =>
+      resetFlightPose(world.viewerRig.position, world.viewerRig.quaternion),
+    constrainHeight: (limits: FlightHeightLimits) =>
+      keepFlightWithinHeightLimits(world.viewerRig.position, groundYAt, limits),
+    minimumGroundClearanceMeters: FLIGHT_SETTINGS.minimumGroundClearanceMeters,
+  };
+}
+
+type PlaybackBindings = Omit<
+  ShowRuntimeOptions,
+  "timebase" | "createNarration" | "droneOrgan"
+>;
+interface PlaybackComposition extends PlaybackBindings {
+  readonly world: World;
+  readonly signal: AbortSignal;
+}
+
+/** Construct shared sound, releasing unpublished resources if preparation fails. */
+export async function composePlayback(
+  request: ShowRequest,
+  options: PlaybackComposition,
+) {
+  validateShowRequest(request);
+  const audio = await createSpatialAudio(options.world.camera, options.signal);
+  try {
+    options.signal.throwIfAborted();
+    const playback = await composeShow(request, options, audio);
+    return { audio, playback };
+  } catch (error) {
+    return releaseUnpublishedSound([audio], error);
+  }
+}
+
+async function composeShow(
+  request: ShowRequest,
+  options: PlaybackBindings,
+  audio: SpatialAudio,
+): Promise<ShowRuntime> {
+  const timebase = createAudioTimebase();
+  let droneOrgan: ReturnType<typeof createDroneOrgan>;
+  try {
+    droneOrgan = createDroneOrgan(
+      { pulseSeconds: ORGAN_SCORE.pulseSeconds },
+      audio,
+    );
+  } catch (error) {
+    return releaseUnpublishedSound([timebase], error);
+  }
+  return createShowRuntime(request, {
+    ...options,
+    timebase,
+    createNarration: () => createNarrationPlayer({ recordings: [] }),
+    droneOrgan,
+  });
+}
+
+/** End unpublished followers before their context and preserve the construction failure. */
+async function releaseUnpublishedSound(
+  owners: readonly (
+    | { readonly unload: () => void | Promise<void> }
+    | undefined
+  )[],
+  failure: unknown,
+): Promise<never> {
+  const errors = [failure];
+  for (const owner of owners) {
+    try {
+      await owner?.unload();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length > 1)
+    throw new AggregateError(errors, "Sound construction and cleanup failed");
+  throw failure;
 }

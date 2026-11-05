@@ -11,7 +11,7 @@ import { describe, expect, test } from "bun:test";
 import {
   cueDisplayName,
   formatShowTime,
-} from "../../src/conductor/time-format";
+} from "../../src/ui/shared/show-time-format";
 
 describe("formatShowTime", () => {
   test("pads the seconds to two digits", () => {
@@ -21,7 +21,7 @@ describe("formatShowTime", () => {
   });
 
   test("writes the length of the piece", () => {
-    expect(formatShowTime(521)).toBe("8:41");
+    expect(formatShowTime(525)).toBe("8:45");
   });
 
   test("truncates rather than rounding up to a second that has not come", () => {

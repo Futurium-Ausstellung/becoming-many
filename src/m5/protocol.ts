@@ -3,15 +3,13 @@
  * Context: The device is a polled HTTP server on the station network; clients GET its state.
  * Responsibility: Own the state payload shape, the serial setup messages, and the parser
  *   that turns untrusted wire text into a typed state.
- * Boundary: Polling cadence, ControlFrame derivation, and flashing live elsewhere.
+ * Boundary: Polling cadence, flight-axis mapping, and flashing live elsewhere.
  */
 
 /**
- * Must match `FirmwareVersion` in `firmware/m5/src/main.cpp`. A client that
- * sees a different value warns the operator instead of guessing at payload
- * compatibility.
+ * Must match `FirmwareVersion` in `firmware/m5/src/main.cpp`. Runtime reads other versions too; this identifies the bundled firmware.
  */
-export const M5_FIRMWARE_VERSION = "0.3.2-bm-http";
+export const M5_FIRMWARE_VERSION = "0.3.3-bm-http";
 
 /**
  * `GET /state` on port 80 is the one polled endpoint; everything the device
@@ -49,7 +47,8 @@ export interface M5State {
 
 /**
  * Setup messages over USB serial, one JSON object per line. The device answers
- * every command with a single JSON line carrying a matching `type`.
+ * commands with typed result lines; getConfig returns `config`, and clearing
+ * calibration also returns `calibrateResult`. State mirrors have no `type`.
  */
 export type M5SerialCommand =
   | {
@@ -70,6 +69,143 @@ export type M5SerialCommand =
   | { readonly type: "clearCalibration" }
   | { readonly type: "factoryReset" }
   | { readonly type: "reboot" };
+
+interface M5SerialIdentity {
+  readonly firmwareVersion: string;
+  readonly deviceId: string;
+}
+
+export type M5SerialResponse = M5SerialIdentity &
+  (
+    | {
+        readonly type:
+          | "configureResult"
+          | "calibrateResult"
+          | "factoryResetResult"
+          | "rebootResult"
+          | "commandResult";
+        readonly ok: boolean;
+        readonly message: string;
+      }
+    | {
+        readonly type: "config";
+        readonly ssid: string;
+        readonly hasPassword: boolean;
+        readonly swapPitchRoll: boolean;
+        readonly invertPitch: boolean;
+        readonly invertRoll: boolean;
+        readonly isCalibrated: boolean;
+        readonly pitchOffset: number;
+        readonly rollOffset: number;
+      }
+    | {
+        readonly type: "diagnoseResult";
+        readonly hasConfig: boolean;
+        readonly wifiStatus: number;
+        readonly localIp: string;
+        readonly rssi: number;
+        readonly mdnsRunning: boolean;
+        readonly httpPort: number;
+        readonly imuPresent: boolean;
+        readonly lastPollAgeMs: number;
+        readonly isCalibrated: boolean;
+      }
+  );
+
+/** Copy public response fields and redact echoes of the current setup password. */
+export function parseM5SerialResponse(
+  text: string,
+  password = "",
+): M5SerialResponse | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const record = parsed as Record<string, unknown>;
+  if (typeof record.firmwareVersion !== "string") return null;
+  if (typeof record.deviceId !== "string") return null;
+  const redact = (text: string): string =>
+    password ? text.replaceAll(password, "[redacted]") : text;
+  const identity = {
+    firmwareVersion: redact(record.firmwareVersion),
+    deviceId: redact(record.deviceId),
+  };
+  switch (record.type) {
+    case "configureResult":
+    case "calibrateResult":
+    case "factoryResetResult":
+    case "rebootResult":
+    case "commandResult":
+      if (
+        typeof record.ok !== "boolean" ||
+        typeof record.message !== "string"
+      ) {
+        return null;
+      }
+      return {
+        ...identity,
+        type: record.type,
+        ok: record.ok,
+        message: redact(record.message),
+      };
+    case "config":
+      if (
+        typeof record.ssid !== "string" ||
+        typeof record.hasPassword !== "boolean" ||
+        typeof record.swapPitchRoll !== "boolean" ||
+        typeof record.invertPitch !== "boolean" ||
+        typeof record.invertRoll !== "boolean" ||
+        typeof record.isCalibrated !== "boolean" ||
+        !areFiniteNumbers(record.pitchOffset, record.rollOffset)
+      )
+        return null;
+      return {
+        ...identity,
+        type: record.type,
+        ssid: redact(record.ssid),
+        hasPassword: record.hasPassword,
+        swapPitchRoll: record.swapPitchRoll,
+        invertPitch: record.invertPitch,
+        invertRoll: record.invertRoll,
+        isCalibrated: record.isCalibrated,
+        pitchOffset: record.pitchOffset as number,
+        rollOffset: record.rollOffset as number,
+      };
+    case "diagnoseResult":
+      if (
+        typeof record.hasConfig !== "boolean" ||
+        typeof record.localIp !== "string" ||
+        typeof record.mdnsRunning !== "boolean" ||
+        typeof record.imuPresent !== "boolean" ||
+        typeof record.isCalibrated !== "boolean" ||
+        !areFiniteNumbers(
+          record.wifiStatus,
+          record.rssi,
+          record.httpPort,
+          record.lastPollAgeMs,
+        )
+      )
+        return null;
+      return {
+        ...identity,
+        type: record.type,
+        hasConfig: record.hasConfig,
+        localIp: redact(record.localIp),
+        mdnsRunning: record.mdnsRunning,
+        imuPresent: record.imuPresent,
+        isCalibrated: record.isCalibrated,
+        wifiStatus: record.wifiStatus as number,
+        rssi: record.rssi as number,
+        httpPort: record.httpPort as number,
+        lastPollAgeMs: record.lastPollAgeMs as number,
+      };
+    default:
+      return null;
+  }
+}
 
 /** Parse an untrusted `/state` response body. Returns null for anything malformed. */
 export function parseM5State(text: string): M5State | null {

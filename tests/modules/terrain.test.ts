@@ -18,13 +18,11 @@ import {
   createTerrainModule,
   type TerrainParameters,
 } from "../../src/modules/terrain/terrain";
-import type {
-  TerrainMaterialEffect,
-  TerrainPresentation,
-} from "../../src/modules/terrain/terrain-geometry";
+import type { TerrainPresentation } from "../../src/modules/terrain/terrain-geometry";
 import { createZoneVisualizer } from "../../src/modules/zone-visualizer/zone-visualizer";
+import type { TerrainMaterialEffect } from "../../src/utils/asset-loader/material-effect";
 import { StreamQueue } from "../../src/world/stream-queue";
-import type { Viewpoint } from "../../src/world/viewer-rig";
+import type { Viewpoint } from "../../src/world/viewpoint";
 import { WORLD_SURFACE_SETTINGS } from "../../src/world-surface/surface-settings";
 import {
   createWorldSurface,
@@ -116,6 +114,20 @@ test("Terrain applies and advances material effects", () => {
 
   expect(appliedMaterial).toBeDefined();
   expect(updates).toEqual([0.25]);
+  loadedTerrain.module.unload();
+
+  let disposed = 0;
+  expect(() =>
+    createLoadedTerrain(undefined, DEFAULT_TERRAIN_PARAMETERS, undefined, [
+      {
+        applyTo: (material) => {
+          material.addEventListener("dispose", () => disposed++);
+          throw new Error("Effect failed");
+        },
+      },
+    ]),
+  ).toThrow("Effect failed");
+  expect(disposed).toBe(1);
 });
 
 test("Terrain samples shared border heights identically", () => {
@@ -183,6 +195,9 @@ test("Terrain never queries zones while generating geometry", () => {
     surfaceYAt: () => 0,
     zoneConditionsAt: () => {
       throw new Error("Terrain must not query zone conditions");
+    },
+    zoneInfluencesAt: () => {
+      throw new Error("Terrain must not query zone influences");
     },
     zoneAt: () => {
       throw new Error("Terrain must not query zones");
@@ -306,6 +321,10 @@ function createLoadedTerrain(
   const viewerPosition = new Vector3();
   const viewpoint: Viewpoint = {
     worldPosition: viewerPosition,
+    worldBodyDirection: new Vector3(0, 0, -1),
+    worldDirection: new Vector3(0, 0, -1),
+    worldUp: new Vector3(0, 1, 0),
+    viewHalfAngleRadians: Math.PI / 4,
     viewDistanceMeters: 24,
   };
   const streamQueue = new StreamQueue(

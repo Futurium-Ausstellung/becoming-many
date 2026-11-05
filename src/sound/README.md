@@ -1,60 +1,124 @@
-<!--
-Purpose: Document ownership of the experience audio layer.
-Context: Narration and the drone organ ship; per-sense beds follow.
-Responsibility: Explain what belongs in src/sound.
-Boundary: When something plays is decided in src/dramaturgy, not here.
--->
-
 # Sound
 
-This folder owns **how the piece is heard**: the audio context, the media
-elements, and their full lifecycle. It never decides *when* anything plays.
+Show selects narration and organ playback; Run owns complete audio lifetime.
+The native `audio-timebase.ts` context remains separate: its currentTime drives
+ShowClock and suspension freezes Show time. It is never connected to Tone.
 
-`audio-timebase.ts` owns the one `AudioContext`. Its `currentTime` is the
-monotonic clock the Show Clock derives show time from — a hardware timebase
-rather than accumulated frame deltas, so a long frame or a paused XR session
-cannot drift the show away from the narration. A browser keeps the context
-suspended until a user gesture, so the timebase attaches a self-removing
-gesture listener; while it is suspended the timebase stalls, which correctly
-freezes show time instead of letting the show run without its audio.
+`spatial-audio.runtime.ts` lazily acquires the existing Tone context for one Run. Run
+ends its sound followers before awaiting this owner's context close/disposal.
+Gesture wake remains available until unload, including after a later suspension.
+A replacement Run creates a context only after the previous context has closed;
+no source creates or replaces a live global context.
 
-`drone-organ/` is the piece's generative instrument: nine voices built on
-Tone.js and driven from the Show Runtime. Which voice sounds when, and to what
-pulse, is the dramaturgy's score in `src/dramaturgy/organ-score.ts`; the organ
-follows it exactly as the narration follows the schedule. It has no clock of
-its own: Tone's transport is not used, every rhythmic voice steps on a grid of
-show seconds, and every note it plays is a hash of its step, so a seek lands
-on the note playing through would have reached. It loads Tone only when a show
-actually asks for the organ, and it plays on the context Tone builds for
-itself rather than on the timebase's — Tone's `AudioWorklet` nodes only come
-up on a context its own audio library created, and sharing this one
-measurably silenced every voice's room. The two contexts never mix audio: the
-timebase's carries no nodes at all, and both resume on the same first gesture.
-The organ's own README explains the composition and what the port from the
-instrument's old repository left behind.
+The shared Three.js AudioListener is the context's only pose writer. Run calls
+its update after locomotion; it refreshes camera ancestors and uses the latest
+available XR head position, orientation and roll, as the existing organ did. The listener is kept outside the rendered scene graph so
+scene traversal cannot write it again. Stationary poses write nothing; moving
+poses retain the existing organ's three-frame write interval. Organ signal
+sampling remains separate from listener mutation. Native pose ramps are fixed
+to 1/30 second: using Three's internal listener Timer with skipped idle writes
+would otherwise make the first movement ramp over the entire stationary period.
 
-`narration-player.ts` follows the clock. It holds one preloaded
-`HTMLAudioElement` per cue for the session's language only — about 7.4 MB
-across eight recordings — because a retargeted single element would re-stall on
-every seek across a cue boundary, and scrubbing is the reason the clock exists.
-Elements stream; nothing is decoded to PCM. It mirrors the clock's time scale
-onto playback rate, corrects position only past a tolerance because a re-seek
-is audible, and falls silent where a slot outlasts its recording in the shorter
-language.
+Live gain/filter, source and listener parameters retire their previous automation
+history before each changed write, holding the rendered value first. Tone 14's
+bundled automation list otherwise retains past-only events and scans growing
+histories. `audio-parameter.ts` applies this only to exclusively owned,
+unmodulated live followers; it never cancels scheduled music controls. Existing
+80 ms target smoothing, listener ramp timing and Three placement remain in place.
 
-The audio hardware clock is the **timebase**; the Show Clock in
-`src/dramaturgy` is the **authority**. Everything here is a follower, so seek
-and pause behave in rehearsal.
+`narration-player.ts` owns clock-following main Show speech. It
+accepts the main recordings selected by Show, with measured durations. Changing
+language retains unchanged cue/URL elements and keeps the audible clip until its
+silent replacement is ready. At most one outgoing clip survives the prepared set;
+failed replacement does not stop current speech. Show supplies the selected cue
+and its unchanged schedule offset. A shorter outgoing recording is never sought
+past its own duration or restarted while the longer replacement loads.
+Replacement positioning is bounded to an initial seek and one final alignment;
+slow native seeks cannot indefinitely chase advancing Show time.
+Unchanged Hold frames write neither native time nor rate. Per-clip state retains
+the last held seek, one pending/rejected play attempt and bounded replacement
+positioning. Show remains the sole clock. A rejected start waits for Pause → Play or a new
+cue intent, rather than allocating another promise per frame. Pause, cue changes
+and unload invalidate stale requests; metadata arrival still applies the exact
+current scrub target.
 
-## Deliberately Absent
+`drone-organ/` remains the distinct generative musical system. It borrows the
+shared Tone context, follows Show's score and places its two existing equal-power
+voices. It no longer owns a second listener writer, gesture listener or context
+close path. Tone Transport is not a second Show clock.
 
-Per-sense audio beds and operator volume are absent. No master gain across
-narration and organ exists yet either; both reach the destination on their
-own, on their own contexts. A small issue-backed audio addition must follow the
-existing show time, own a bounded voice/resource pool, and be measured on the
-PICO. Do not add a second timeline or speculative audio framework: the organ
-had one in Tone's transport and it was removed for exactly that reason.
+Source capacities and local tests do not prove speech intelligibility, HRTF
+front/back localization, first-time visitor comprehension or stable 90 Hz on
+the actual Windows-PCVR USB-C installation. See [Performance](../../docs/performance.md).
 
-The organ's cost has been measured on nothing but a desktop browser so far. It
-carries four Freeverb rooms and one convolution reverb, and Tone builds
-Freeverb on `AudioWorklet` — that is the first thing to measure on the PICO.
+
+## Granular atmosphere source material
+
+On 2026-09-08 the user supplied eleven generated instrumentals for granular
+recomposition, with multiple spatial layers, substantial reverb and a distant
+character. They are source material, not a requested full-track soundtrack.
+The user further requires concrete object binding and an audible near/far
+relationship: each spatial layer belongs to a visible object/particle body and
+uses that owner's world position. Direct level, filtering and room balance must
+change smoothly with listener distance, while a diffuse hall must not mask
+localization or remain equally loud at every distance. Static emitters never
+follow the player; moving/removed objects move/end their own sound.
+Original bytes are preserved under `public/audio/granular/`, named
+`atmosphere-source-01.mp3` through `atmosphere-source-11.mp3`. Numbering maps
+exactly to the original download suffix, without invented timbre names.
+[Provenance](../../public/audio/granular/provenance.json) records that mapping,
+SHA-256, measured format/duration/levels and original generator metadata (Suno).
+The unnumbered file in Downloads was not among the eleven supplied files.
+
+All eleven are distinct, fully decodable 48 kHz stereo MP3 files: 41,061,238 bytes,
+1,775.1485 seconds total. Integrated loudness spans -16.2 to -12.5 LUFS; the
+highest reconstructed true peak is +0.1 dBFS. These are technical measurements,
+not an audition or a content recommendation. Original files were not normalized,
+trimmed or transcoded. Direct listening was unavailable in this session.
+
+| Source | Duration | Integrated loudness |
+| --- | ---: | ---: |
+| [atmosphere-source-01.mp3](../../public/audio/granular/atmosphere-source-01.mp3) | 1:10 | -16.2 LUFS |
+| [atmosphere-source-02.mp3](../../public/audio/granular/atmosphere-source-02.mp3) | 2:26 | -14.6 LUFS |
+| [atmosphere-source-03.mp3](../../public/audio/granular/atmosphere-source-03.mp3) | 1:01 | -14.1 LUFS |
+| [atmosphere-source-04.mp3](../../public/audio/granular/atmosphere-source-04.mp3) | 2:18 | -13.3 LUFS |
+| [atmosphere-source-05.mp3](../../public/audio/granular/atmosphere-source-05.mp3) | 3:48 | -13.3 LUFS |
+| [atmosphere-source-06.mp3](../../public/audio/granular/atmosphere-source-06.mp3) | 2:07 | -12.5 LUFS |
+| [atmosphere-source-07.mp3](../../public/audio/granular/atmosphere-source-07.mp3) | 3:09 | -12.8 LUFS |
+| [atmosphere-source-08.mp3](../../public/audio/granular/atmosphere-source-08.mp3) | 2:43 | -14.0 LUFS |
+| [atmosphere-source-09.mp3](../../public/audio/granular/atmosphere-source-09.mp3) | 3:31 | -13.9 LUFS |
+| [atmosphere-source-10.mp3](../../public/audio/granular/atmosphere-source-10.mp3) | 3:33 | -14.2 LUFS |
+| [atmosphere-source-11.mp3](../../public/audio/granular/atmosphere-source-11.mp3) | 3:49 | -13.8 LUFS |
+
+The original source files and prepared mono excerpts remain available as authored
+assets. The current tutorial uses the prepared sources under
+`public/audio/tutorial/atmosphere/`; its spatial playback and gain ownership are
+documented in [Start architecture](../modules/start/ARCHITECTURE.md#quiet-spatial-atmosphere).
+
+## Tutorial voice
+
+`voice-player.ts` owns one active native audio element and at most one silent
+replacement for Start. Level Composition injects its public `VoicePlayback`
+capability for both audience/Conductor training and standalone Start; Run owns
+cleanup. Start selects recordings and instruction offsets. Optional spoken-marker
+maps translate native seconds onto the initial cue timeline without changing
+playback rate. `play` selects a new cue; `replace` changes only its recording.
+`read` returns borrowed, nondecreasing cue seconds during usable playback within
+that selection, plus natural completion and failure separately. Failure never
+masquerades as completion. Autoplay denial retries on a pointer/key gesture;
+stop/unload invalidate pending promises and
+unload releases gesture listeners and the media source. There is no second clock.
+Main Show narration retains its clock-following player and EN/DE recordings.
+The tutorial ships separate German and English recordings. Language replacement
+preserves the active source until loading, seeking and playback succeed. A paused
+replacement stays paused and needs no playback start. Preparation permits one
+initial seek and one final alignment, so slow seeks still finish. Newer selection,
+clip changes and cleanup discard obsolete replacements. If the original ends
+naturally before replacement is ready, the candidate is discarded rather than
+replaying the completed cue; the next cue uses the current language. Gain survives
+replacement, including the tutorial handoff fade.
+
+Pure Sound contracts may be imported as types by Start; Sound implementations
+remain Composition dependencies. Unit coverage lives in
+[Sound tests](../../tests/sound/README.md), with real media checks in
+[browser verification](../../tests/browser/README.md#live-language-regression).

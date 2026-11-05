@@ -9,8 +9,8 @@ import { describe, expect, test } from "bun:test";
 import {
   type ConductorKeyPress,
   resolveConductorKey,
-} from "../../src/conductor/conductor-keys";
-import { CONDUCTOR_SETTINGS } from "../../src/conductor/conductor-settings";
+} from "../../src/ui/conductor/keyboard-shortcuts";
+import { CONDUCTOR_SETTINGS } from "../../src/ui/conductor/operator-settings";
 
 function press(overrides: Partial<ConductorKeyPress> = {}): ConductorKeyPress {
   return {

@@ -41,6 +41,10 @@ function createOptions(): MagneticSenseOptions {
     scene: new Scene(),
     viewpoint: {
       worldPosition: new Vector3(),
+      worldBodyDirection: new Vector3(0, 0, -1),
+      worldDirection: new Vector3(0, 0, -1),
+      worldUp: new Vector3(0, 1, 0),
+      viewHalfAngleRadians: Math.PI / 4,
       viewDistanceMeters: DEFAULT_VIEW_DISTANCE_METERS,
     },
     skyHazeColor: 0xf1f1f1,

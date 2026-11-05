@@ -37,8 +37,10 @@ watchdogConfig:
 
   application:
     # Launched through cmd.exe: a .bat is a script for the command interpreter,
-    # not an image Windows can start on its own.
-    binary: C:/Windows/System32/cmd.exe
+    # not an image Windows can start on its own. Backslashes are required here:
+    # Watchdog puts this path verbatim at the start of the command line, where
+    # cmd.exe fails on forward slashes (exit 1) before it ever runs the script.
+    binary: C:\Windows\System32\cmd.exe
     directory: C:/becoming-many/watchdog
     arguments:
       - /c

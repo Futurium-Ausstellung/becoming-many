@@ -5,9 +5,9 @@
  * Boundary: Visual fidelity and target-device performance require runtime acceptance.
  */
 
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import {
-  type DataTexture,
+  DataTexture,
   DataUtils,
   type Group,
   type Mesh,
@@ -27,11 +27,13 @@ import {
   type GrassClipmapPreset,
 } from "../../src/modules/grass-clipmap/grass-clipmap-settings";
 import { createGrassHeightField } from "../../src/modules/grass-clipmap/grass-height-field";
+import { createWorldFade } from "../../src/modules/world-fade/world-fade";
 import type {
   SensedMaterial,
   UnlitMaterialEffect,
 } from "../../src/utils/asset-loader/material-effect";
 import { StreamQueue } from "../../src/world/stream-queue";
+import { getElevationRange } from "../../src/world-surface/height-field";
 import { WORLD_SURFACE_SETTINGS } from "../../src/world-surface/surface-settings";
 import { createWorldSurface } from "../../src/world-surface/world-surface";
 import { ZONE_SETTINGS } from "../../src/world-surface/zone-settings";
@@ -51,6 +53,10 @@ function createModuleOptions(scene: Scene, viewerPosition: Vector3) {
     scene,
     viewpoint: {
       worldPosition: viewerPosition,
+      worldBodyDirection: new Vector3(0, 0, -1),
+      worldDirection: new Vector3(0, 0, -1),
+      worldUp: new Vector3(0, 1, 0),
+      viewHalfAngleRadians: Math.PI / 4,
       // The clipmap sizes itself from its preset, never from a view distance.
       viewDistanceMeters: 0,
     },
@@ -156,7 +162,7 @@ test("the height field reproduces the world surface it samples", () => {
   heightField.dispose();
 });
 
-test("the height field leaves zones that grow no grass bare", () => {
+test("the height field uses shared zone influences and excludes water exactly", () => {
   const settings = GRASS_CLIPMAP_SETTINGS.heightField;
   const heightField = createGrassHeightField({
     worldSurface,
@@ -165,27 +171,34 @@ test("the height field leaves zones that grow no grass bare", () => {
     cameraZ: 0,
   });
   const data = (heightField.texture as DataTexture).image.data as Uint16Array;
-  const coverage: Partial<Record<string, number>> =
-    GRASS_CLIPMAP_SETTINGS.zoneCoverage;
+  const coverage = GRASS_CLIPMAP_SETTINGS.zoneCoverage;
 
   let bareFound = false;
   let coveredFound = false;
+  let transitionFound = false;
   for (let row = 0; row < settings.sizeTexels; row += 7) {
     for (let column = 0; column < settings.sizeTexels; column += 7) {
       const worldX = heightField.placement.x + column * settings.texelMeters;
       const worldZ = heightField.placement.y + row * settings.texelMeters;
       const index = (row * settings.sizeTexels + column) * 2 + 1;
       const stored = DataUtils.fromHalfFloat(data[index] ?? 0);
-      const zone = worldSurface.zoneAt(worldX, worldZ);
-      expect(stored).toBeCloseTo(coverage[zone] ?? 0, 3);
+      const influences = worldSurface.zoneInfluencesAt(worldX, worldZ);
+      const expected =
+        influences.meadow * coverage.meadow +
+        influences.shrubSlope * coverage.shrubSlope;
+      expect(stored).toBeCloseTo(expected, 3);
+      if (worldSurface.zoneAt(worldX, worldZ) === "water")
+        expect(stored).toBe(0);
+      if (influences.meadow > 0 && influences.meadow < 1)
+        transitionFound = true;
       if (stored === 0) bareFound = true;
       if (stored > 0) coveredFound = true;
     }
   }
-  // Water and both forest zones are never grass zones, and the sampled window
-  // has to contain both kinds of ground or the check proves nothing.
+  // Require bare land, covered land and a transition in the sampled window.
   expect(bareFound).toBe(true);
   expect(coveredFound).toBe(true);
+  expect(transitionFound).toBe(true);
 
   heightField.dispose();
 });
@@ -218,38 +231,73 @@ test("the blade shaders carry the anchors a sense patches at", () => {
   module.unload();
 });
 
-test("a sense reaches every blade material and takes the lighting with it", () => {
-  const scene = new Scene();
-  const viewerPosition = new Vector3();
-  const patched: SensedMaterial[] = [];
-  const effect: UnlitMaterialEffect = {
-    applyTo: (material) => {
-      patched.push(material);
-    },
-  };
-  const module = createGrassClipmapModule({
-    ...createModuleOptions(scene, viewerPosition),
-    effects: [effect],
-  });
+test.each([false, true])(
+  "blade materials remain owned when sense application fails: %s",
+  (fails) => {
+    const scene = new Scene();
+    const viewerPosition = new Vector3();
+    const patched: SensedMaterial[] = [];
+    let disposed = 0;
+    const fade = createWorldFade();
+    const effect: UnlitMaterialEffect = {
+      applyTo: (material) => {
+        patched.push(material);
+        material.addEventListener("dispose", () => disposed++);
+        if (fails && patched.length === 2) throw new Error("Effect failed");
+        fade.applyTo(material);
+      },
+    };
+    const module = createGrassClipmapModule({
+      ...createModuleOptions(scene, viewerPosition),
+      effects: [effect],
+    });
 
-  module.load();
-  // Every tier and every allocation step of every level, or a chunk would
-  // swap to a material the sense never saw.
-  const stepCount =
-    GRASS_CLIPMAP_SETTINGS.density.stepsUp +
-    GRASS_CLIPMAP_SETTINGS.density.stepsDown +
-    1;
-  expect(patched).toHaveLength(
-    GRASS_CLIPMAP_SETTINGS.layout.levels * 3 * stepCount,
-  );
-  for (const material of patched) {
-    // The sense owns the color, so the lighting block is compiled out rather
-    // than computed and discarded.
-    expect((material as ShaderMaterial).defines?.GRASS_LIT).toBe(0);
-  }
+    if (fails) {
+      const textureDispose = spyOn(DataTexture.prototype, "dispose");
+      try {
+        expect(() => module.load()).toThrow("Effect failed");
+        expect(disposed).toBe(2);
+        expect(textureDispose).toHaveBeenCalledTimes(1);
+        expect(scene.children).toHaveLength(0);
+        module.unload();
+        expect(disposed).toBe(2);
+      } finally {
+        textureDispose.mockRestore();
+      }
+      return;
+    }
 
-  module.unload();
-});
+    module.load();
+    // Every tier and every allocation step of every level, or a chunk would
+    // swap to a material the sense never saw.
+    const stepCount =
+      GRASS_CLIPMAP_SETTINGS.density.stepsUp +
+      GRASS_CLIPMAP_SETTINGS.density.stepsDown +
+      1;
+    expect(patched).toHaveLength(
+      GRASS_CLIPMAP_SETTINGS.layout.levels * 3 * stepCount,
+    );
+    for (const material of patched) {
+      // The sense owns the color, so the lighting block is compiled out rather
+      // than computed and discarded.
+      const blade = material as ShaderMaterial;
+      expect(blade.defines?.GRASS_LIT).toBe(0);
+      const shader = {
+        uniforms: { ...blade.uniforms },
+        vertexShader: blade.vertexShader,
+        fragmentShader: blade.fragmentShader,
+      } as Parameters<ShaderMaterial["onBeforeCompile"]>[0];
+      blade.onBeforeCompile(shader, undefined as never);
+      expect(shader.vertexShader).not.toContain("#include <begin_vertex>");
+      expect(shader.fragmentShader).toContain(
+        "applyWorldFade(diffuseColor.rgb)",
+      );
+      expect(shader.uniforms.worldFadePresence).toBeDefined();
+    }
+
+    module.unload();
+  },
+);
 
 test("a refused refill is retried instead of latching forever", () => {
   const scene = new Scene();
@@ -297,6 +345,40 @@ test("the grass clipmap follows the world module lifecycle", () => {
   module.load();
   const group = scene.children[0] as Group;
   expect(group.children.length).toBeGreaterThan(0);
+  const bounds = (group.children[0] as Mesh).geometry.boundingSphere;
+  if (!bounds) throw new Error("Grass requires conservative CPU bounds");
+  const size =
+    GRASS_CLIPMAP_SETTINGS.layout.coverage0Meters /
+    GRASS_CLIPMAP_SETTINGS.layout.ring;
+  const elevation = getElevationRange(WORLD_SURFACE_SETTINGS);
+  const maximumDistance = GRASS_CLIPMAP_SETTINGS.fade.endMeters * 1.05;
+  const spacing =
+    maximumDistance /
+    PRESET.fullDensityRadiusMeters /
+    Math.sqrt(PRESET.tuftsPerSquareMeter);
+  const scatter = spacing * GRASS_CLIPMAP_SETTINGS.density.jitter * 0.5;
+  const halfWidth =
+    Math.max(
+      PRESET.bladeWidthMeters * 1.28,
+      maximumDistance * GRASS_CLIPMAP_SETTINGS.blade.minAngularWidth,
+      spacing * 0.26,
+    ) * 0.5;
+  // Every extreme root, including scatter beyond the chunk, must leave room
+  // for the full blade and its width in any wind direction.
+  for (const x of [-scatter, size + scatter]) {
+    for (const z of [-scatter, size + scatter]) {
+      for (const y of [
+        elevation.minimumElevation,
+        elevation.maximumElevation,
+      ]) {
+        expect(
+          bounds.center.distanceTo(new Vector3(x, y, z)) +
+            PRESET.bladeHeightMeters +
+            halfWidth,
+        ).toBeLessThanOrEqual(bounds.radius);
+      }
+    }
+  }
   // Loading happens before the first render, so nothing is visible yet.
   expect(group.visible).toBe(false);
 

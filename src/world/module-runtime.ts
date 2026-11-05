@@ -34,10 +34,11 @@ export class ModuleRuntime {
   private readonly states = new Map<WorldModule, ModuleState>();
 
   load(module: WorldModule): void {
-    if (this.states.has(module)) return;
+    const state = this.states.get(module);
+    if (state) return;
 
-    module.load();
     this.states.set(module, "inactive");
+    module.load();
   }
 
   /**
@@ -75,17 +76,23 @@ export class ModuleRuntime {
     this.states.set(module, "inactive");
   }
 
-  // Part of the explicit lifecycle API; modules must remain fully unloadable.
   unload(module: WorldModule): void {
     if (!this.states.has(module)) return;
-
-    this.deactivate(module);
-    module.unload();
+    const errors: unknown[] = [];
+    try {
+      this.deactivate(module);
+    } catch (error) {
+      errors.push(error);
+    }
     this.states.delete(module);
+    try {
+      module.unload();
+    } catch (error) {
+      errors.push(error);
+    }
+    if (errors.length)
+      throw new AggregateError(errors, "Module cleanup failed");
   }
-
-  // Future: support asynchronous load transitions without blocking activation.
-
   // Procedural chunk work uses the separate world StreamQueue. Keeping it out
   // of this class prevents module lifecycle and spatial streaming from mixing.
 }

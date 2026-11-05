@@ -1,7 +1,7 @@
 /**
  * Purpose: Answer which world state and sense strengths hold at a show time.
  * Context: Schedule cues carry the level; senses fade in from cue boundaries.
- * Responsibility: Own the sense ladder, the fade constant, and pure lookups.
+ * Responsibility: Derive sense targets from supplied level recipes and own fade lookups.
  * Boundary: Presets, modules, and how intensities reach the GPU live elsewhere.
  */
 
@@ -20,7 +20,7 @@ export type ShowSense =
   | "magnetic"
   | "connections";
 
-const SHOW_SENSES: readonly ShowSense[] = [
+export const SHOW_SENSES: readonly ShowSense[] = [
   "scent",
   "echo",
   "motion",
@@ -29,59 +29,29 @@ const SHOW_SENSES: readonly ShowSense[] = [
   "connections",
 ];
 
-/** Values the running show can change without rebuilding its world. */
+/** Read-only subset of a level recipe; the Show owns no parallel configuration. */
 export interface ShowLevelState {
   readonly backgroundColor: number;
   readonly viewDistance: number;
   readonly maximumGroundClearanceMeters: number;
-  readonly senses: readonly ShowSense[];
+  /** Scent presence is sufficient; its module has no authored intensity. */
+  readonly scentParticles?: object;
+  readonly echoDepth?: { readonly intensity: number };
+  readonly motion?: { readonly intensity: number };
+  readonly thermal?: { readonly intensity: number };
+  readonly magnetic?: { readonly intensity: number };
+  readonly connections?: { readonly intensity: number };
 }
 
-/** One truthful runtime state for every level name a schedule can select. */
-export const SHOW_LEVEL_STATES: Record<ShowLevelName, ShowLevelState> = {
-  "white-world": {
-    backgroundColor: 0xffffff,
-    viewDistance: 128,
-    maximumGroundClearanceMeters: 50,
-    senses: [],
-  },
-  scent: {
-    backgroundColor: 0xffffff,
-    viewDistance: 128,
-    maximumGroundClearanceMeters: 50,
-    senses: ["scent"],
-  },
-  echo: {
-    backgroundColor: 0xf7f7f7,
-    viewDistance: 128,
-    maximumGroundClearanceMeters: 50,
-    senses: ["scent", "echo"],
-  },
-  motion: {
-    backgroundColor: 0xf7f7f7,
-    viewDistance: 128,
-    maximumGroundClearanceMeters: 50,
-    senses: ["scent", "echo", "motion"],
-  },
-  thermal: {
-    backgroundColor: 0xf7f7f7,
-    viewDistance: 128,
-    maximumGroundClearanceMeters: 50,
-    senses: ["scent", "echo", "motion", "thermal"],
-  },
-  magnetic: {
-    backgroundColor: 0xf7f7f7,
-    viewDistance: 128,
-    maximumGroundClearanceMeters: 50,
-    senses: ["scent", "echo", "motion", "thermal", "magnetic"],
-  },
-  connections: {
-    backgroundColor: 0xf7f7f7,
-    viewDistance: 128,
-    maximumGroundClearanceMeters: 50,
-    senses: SHOW_SENSES,
-  },
-};
+/** Read the target directly from the level's existing module block. */
+export function levelSenseIntensity(
+  level: ShowLevelState,
+  sense: ShowSense,
+): number {
+  if (sense === "scent") return level.scentParticles ? 1 : 0;
+  if (sense === "echo") return level.echoDepth?.intensity ?? 0;
+  return level[sense]?.intensity ?? 0;
+}
 
 /**
  * How long a sense takes to reach its new strength after a cue boundary. One
@@ -138,7 +108,7 @@ export function showLevelAt(
 /** The authored live state holding at one show time. */
 export function showLevelStateAt(
   schedule: NarrationSchedule,
-  states: Record<ShowLevelName, ShowLevelState>,
+  states: Readonly<Record<ShowLevelName, ShowLevelState>>,
   showTimeSeconds: number,
 ): ShowLevelState | undefined {
   const levelName = showLevelAt(schedule, showTimeSeconds);
@@ -188,7 +158,7 @@ export function levelTransitionAt(
 
 /**
  * One sense's strength at a show time, in 0..1. Each cue boundary sets a new
- * target — one when the cue's level carries the sense, zero when it does not —
+ * target from its level recipe — zero when the module is absent —
  * and the strength moves linearly from wherever it stood at the boundary to
  * that target over `SENSE_FADE_SECONDS`. The value is derived purely from the
  * schedule and the asked instant, never accumulated, so a seek or scrub lands
@@ -196,7 +166,7 @@ export function levelTransitionAt(
  */
 export function senseIntensityAt(
   schedule: NarrationSchedule,
-  states: Record<ShowLevelName, ShowLevelState>,
+  states: Readonly<Record<ShowLevelName, ShowLevelState>>,
   sense: ShowSense,
   showTimeSeconds: number,
 ): number {
@@ -216,7 +186,7 @@ export function senseIntensityAt(
       worldTime,
     );
     rampStartSeconds = worldTime;
-    rampTarget = states[cue.level].senses.includes(sense) ? 1 : 0;
+    rampTarget = levelSenseIntensity(states[cue.level], sense);
   }
 
   return rampValueAt(
@@ -245,7 +215,7 @@ export type SenseStanding =
  */
 export function senseStandingAt(
   schedule: NarrationSchedule,
-  states: Record<ShowLevelName, ShowLevelState>,
+  states: Readonly<Record<ShowLevelName, ShowLevelState>>,
   sense: ShowSense,
   showTimeSeconds: number,
 ): SenseStanding {

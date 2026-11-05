@@ -1,46 +1,28 @@
 # Project Documentation
 
-The current `src/` and `public/` trees define the running system. Documentation
-separates verified implementation, forward work, installation direction, and
-dated evidence.
+The running code and typed configuration are the authority for implementation
+details. These documents contain only stable development guidance and a short
+entry point into current work.
 
-## Current System
+| Document | Authority |
+| --- | --- |
+| [Current work](CURRENT.md) | One-page resume point; GitHub issues own scope, order, and acceptance |
+| [Architecture](architecture.md) | Binding ownership, dependency, contract, and lifetime rules |
+| [Development](development.md) | Implementation workflow, verification selection, and naming conventions |
+| [Experience](experience.md) | Product flow, narrative sequence, and interaction intent |
+| [Performance](performance.md) | Performance target, evidence rules, and measurement gates |
+| [Operations](operations.md) | Verified station operation, safety constraints, and recovery entry points |
+| [Assets](assets.md) | Shipping asset layout, provenance, and material-name contracts |
 
-- [Current Status](current-status.md) — concise implementation and verification
-  snapshot.
-- [Architecture](architecture.md) — runtime composition, ownership, lifecycle,
-  and contracts.
-- [Architecture Decisions](architecture-decisions.md) — current decisions that
-  constrain changes.
-- [Engineering Standards](engineering-standards.md) — coding, architecture,
-  documentation, and validation rules.
-- [Experience](experience.md) — the implemented narrative and interaction flow.
-- [Levels](levels/README.md) — the current world-state sequence and presets.
-- [World Streaming](world-streaming.md) — fixed windows, scheduling, and
-  generation rules.
-- [Landscape Modules](landscape-modules.md) — current module ownership and
-  cross-module contracts.
-- [Platforms](platforms.md) — browser, station, PICO, and PCVR status.
-- [Performance](performance.md) — accepted evidence, targets, and open risks.
-- [Roadmap](roadmap.md) — remaining issue-backed work only.
+Current product and implementation work belongs in
+[GitHub issues](https://github.com/Strehk/becoming-many/issues). Dated reports,
+completed plans, and superseded decisions remain available through Git history
+and issue discussions; they are not maintained as a second backlog here.
 
-## Installation Direction
+The protected Start-level design material under `docs/direction/` and
+`docs/moodboards/start-flight-guidance/` is active product planning. It is not
+part of the canonical engineering-document count and must not be rewritten as
+part of documentation maintenance.
 
-[docs/direction](direction/README.md) contains product and delivery direction
-for the Futurium installation. Every statement there is labelled as current,
-planned, or open. Open decisions remain in
-[Open Decisions](direction/open-decisions.md) and must not be resolved silently.
-
-## Evidence and References
-
-- [Browser Performance Audit — 2026-08-24](performance-audit-2026-08-24.md)
-  preserves its dated desktop measurements.
-- [Grass Clipmap Review — 2026-09-02](performance-review-grass-clipmap-2026-09-02.md)
-  preserves findings against the reviewed revision; current issues decide what
-  still applies.
-- [Assets](assets/) records provenance and current asset use.
-- [Moodboards](moodboards/) preserve visual references, not implementation
-  claims.
-
-Keep documents concise. Replace stale claims instead of accumulating competing
-histories; keep dated evidence only when its date and scope remain explicit.
+[Active visual references](references/README.md) link the protected Start work
+and the retained Connections direction for issue #114.

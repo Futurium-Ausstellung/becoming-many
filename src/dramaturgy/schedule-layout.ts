@@ -53,6 +53,24 @@ export function cueSlots(
   });
 }
 
+/** Display chapters include silent pre-roll in the opening chapter. */
+export interface TimelineChapter {
+  readonly cueId: NarrationCueId;
+  readonly startSeconds: number;
+  readonly endSeconds: number;
+}
+
+export function timelineChapters(
+  schedule: NarrationSchedule,
+): readonly TimelineChapter[] {
+  return schedule.narration.map((cue, index) => ({
+    cueId: cue.cueId,
+    startSeconds: index === 0 ? 0 : cue.atSeconds,
+    endSeconds:
+      schedule.narration[index + 1]?.atSeconds ?? schedule.durationSeconds,
+  }));
+}
+
 /**
  * The cue the show is heading for, which is what a countdown needs. Undefined
  * once the last cue has started: there is nothing further to count down to.

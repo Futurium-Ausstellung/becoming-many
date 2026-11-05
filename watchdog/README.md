@@ -8,7 +8,7 @@ Responsibility: Name the install layout, the supervision chain, the UDP ports,
   and the few things an operator has to do by hand.
 Boundary: What the browser flags do is ../KIOSK.md. What the container serves
   is ../station/README.md. Where the pages must come from and why is
-  ../docs/direction/deployment.md.
+  ../docs/operations.md.
 -->
 
 # Station supervision
@@ -25,7 +25,7 @@ config file from this folder.
 | `docker.yaml` | `Docker Desktop.exe` | 2348 | Docker Desktop gone or crashed; runs the compose bring-up after each launch |
 | `station.yaml` | a `/health` poller | 2349 | a station that stopped answering, whatever the reason |
 | `steamvr.yaml` | `vrmonitor.exe` | 2346 | SteamVR gone or crashed |
-| `pico.yaml` | `PICOBusinessStreaming.exe` | 2347 | the streaming client gone or crashed |
+| `pico.yaml` | `Business Streaming.exe` | 2347 | the streaming client gone or crashed |
 | `kiosk.yaml` | `chrome.exe` | 2350 | a closed, crashed or killed kiosk window |
 
 After each kiosk launch, `kiosk.yaml` runs
@@ -57,6 +57,11 @@ across a reboot, and `docker compose down` on a watchdog stop would only add a
 cold container start to every restart.
 
 ## Install
+
+**Headset cable: use the front USB port. Do not use the rear USB-C port next to
+Ethernet; the user reports whole-PC shutdown when connecting there.** See the
+[recorded cabling restriction](../docs/operations.md#safety-critical-usb-restriction).
+This hardware symptom cannot be repaired by a Watchdog restart.
 
 Keep the repository at `C:\becoming-many` and run the tracked configs and
 scripts directly from its `watchdog` folder. A symbolic link supplies the
@@ -124,15 +129,37 @@ Then:
 4. Check that `shell:startup` contains the `start-station.bat` symbolic link, so
    signing in after a power-on brings the station up.
 
-`start-station.bat` starts Docker Desktop and PICO Business Streaming first,
-waits 30 seconds, starts SteamVR, waits another 15 seconds, then starts the
-kiosk. The station-health poller starts in the initial group because it is
-independent of the VR chain. These pauses only space out process startup; the
-individual application configs add no cold-start delay of their own.
-`docker-up.bat` still waits for the Docker engine and the kiosk still waits for
-`/health` rather than assuming either is ready. The five windows stay in the
-taskbar and the logs land in
-`C:\becoming-many\watchdog\logs`.
+`start-station.bat` delegates to `scripts/start-station.ps1` using the fixed
+installation path, including when invoked through the documented Startup symlink.
+A file lock prevents concurrent launchers. Existing Watchdogs are identified by
+config path; unknown control-port owners stop only that component with a diagnostic. Already
+running external applications are retained with an explicit unsupervised warning.
+No process is killed or port reserved. Docker and PICO start before SteamVR
+(30 seconds), then the kiosk (15 seconds). Every component is attempted even if
+another fails. The PICO port conflict must not prevent the station server or
+kiosk from starting. New Watchdogs have a bounded control-port observation; a
+still-running process with a delayed port is reported as pending, since startup
+hooks may wait for Docker or HTTP. These checks do not establish headset connectivity.
+
+Remove an obsolete `C:\Watchdog` startup shortcut if the installation has migrated
+to the tracked checkout; retain exactly one station startup entry. The diagnostic
+script inventories both startup folders, relevant scheduled tasks and process
+command lines to identify competing owners before changing anything.
+
+After all start attempts, a failure makes the BAT wrapper run
+`scripts/find-problems.ps1 -NoOpen` and keep the
+window open. The latest startup transcript is `watchdog/logs/startup.log`.
+Double-click `scripts/find-problems.bat` for a fresh photographable summary and
+Notepad report at `watchdog/logs/find-problems.txt`. This one-shot collector does
+not stop applications or modify network settings. Reports overwrite the prior
+report, remain ignored by Git and include partial failures rather than aborting
+at the first missing privilege or unavailable tool.
+
+For the confirmed EventLog collision on TCP 49667, the manual
+`scripts/repair-pico-port.bat` performs a reversible administrator repair. It is
+not run silently by startup. See the [repair procedure](../docs/operations.md#diagnosis-and-recovery)
+before running it; Windows must restart before the existing EventLog listener
+can move to another dynamic port.
 
 ## Operating it
 
@@ -152,15 +179,23 @@ $c.Send([Text.Encoding]::ASCII.GetBytes("status"), 6) | Out-Null
 it, the window is back within seconds. Send `stop` to port 2350, do the work,
 send `start` when done. Closing the watchdog's own console window works too.
 
-Updating the show is unchanged and still deliberate: `docker compose pull` in
-`C:\becoming-many`, then let the station watchdog restart, or send it `restart`.
-Nothing in this folder pulls on its own — a power-cycle must never change the
-version an exhibition is running.
+Update deliberately with `scripts\deploy-branch.ps1 -Branch david_refactor` or
+`scripts\deploy-release.ps1` from `C:\becoming-many`. These commands pause the
+kiosk and health poller through their existing UDP controls, then restore both.
+Watchdogs that are not listening remain off; deployment starts Docker Desktop
+if needed and leaves the kiosk closed until the next Windows sign-in. For a
+single-action deployment of `david_refactor`, double-click
+`scripts\deploy-branch.bat` or launch its full path through Win+R.
+Docker Desktop, SteamVR and PICO supervision remain active. The Compose hook
+shares a file lock with deployment, so concurrent hooks skip their bring-up.
+The local `.git\station-deployment.json` selects the image across restarts;
+without it, the base Compose file continues to select the release. Branch mode
+never builds or pulls during boot and never falls back to GHCR when its image
+is missing. See [deployment and recovery](../docs/operations.md).
 
 ## Reading the logs
 
-One rotating log per watchdog in `C:\becoming-many\watchdog\logs`. The scripts
-prefix their own lines, so the story of a cold start reads as `[docker-up]
-engine answered after 45s`, then `[docker-up] station stack is up`, then
+One rotating log per watchdog in `C:\becoming-many\watchdog\logs`. Docker Compose
+reports container startup; the kiosk readiness helper reports
 `[wait-health] station answered after 12s`. A restart loop shows as repeated
 `[poll-health] no answer from http://localhost/health` before each bring-up.

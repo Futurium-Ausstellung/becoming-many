@@ -9,19 +9,19 @@
  */
 
 import { join } from "node:path";
-import { levelNameFromPath } from "../src/levels/level-names";
 import {
   type DeploymentConfig,
   parseDeploymentConfig,
-} from "../src/station/deployment-config";
-import { STATION_SETTINGS } from "../src/station/station-settings";
+} from "../shared/deployment-config";
+import { levelNameFromPath } from "../shared/level-routes";
 
 const DIST_DIRECTORY = join(import.meta.dir, "../dist");
+const DEFAULT_PORT = 7823;
 const startedAtMilliseconds = Date.now();
 
 // PORT names what this process listens on; the compose file maps a host port
 // onto it. Everything else is page-facing and travels through /config.
-const port = Number(process.env.PORT ?? "") || STATION_SETTINGS.port;
+const port = Number(process.env.PORT ?? "") || DEFAULT_PORT;
 
 // Funneled through the same parser the pages use, so a blank env var reads as
 // "not configured" on both sides rather than as an empty-string host.
@@ -55,7 +55,7 @@ async function serveStatic(pathname: string): Promise<Response> {
     decoded === "/"
       ? "/index.html"
       : levelNameFromPath(decoded)
-        ? "/test.html"
+        ? "/index.html"
         : decoded;
   const file = Bun.file(join(DIST_DIRECTORY, relative));
   if (!(await file.exists())) {

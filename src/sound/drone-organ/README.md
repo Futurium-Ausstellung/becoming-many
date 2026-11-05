@@ -24,10 +24,10 @@ with the compass.
 
 ## Where things live
 
-- `drone-organ.ts` is the entry. It carries the per-frame contract and loads
-  the rest **dynamically**: importing Tone.js builds an `AudioContext` — the
-  one the organ then plays on — and a benchmark run or a bare level page must
-  not pay for one.
+- `drone-organ.ts` is the lazy follower entry. Run prepares the Tone context
+  through `../spatial-audio.runtime.ts`; the organ borrows it and owns only its nodes,
+  pending construction and Show-driven scheduling. Standalone levels without
+  configured audio allocate no audio context.
 - `drone-organ-settings.ts` is the composition — the piece the organ plays,
   and the only file to retune it in.
 - `organ-runtime.ts` builds the instrument and follows the world each frame.
@@ -63,7 +63,7 @@ reaches for was carried over:
 
 ## Decisions worth knowing
 
-- **The organ plays on Tone's own `AudioContext`, not the show's.** Tone
+- **The organ plays on the Run-owned Tone `AudioContext`, not the show timebase's.** Tone
   reaches the hardware through standardized-audio-context, whose
   `AudioWorklet` nodes only come up on a context that library created. Sharing
   the timebase's context was measured on the built page: all thirty-two comb
@@ -90,3 +90,7 @@ reaches for was carried over:
 - **Placement is cheap on purpose.** A placed layer follows the nearest
   *cloud* — a flock, a swarm — never an individual bird, and a closed layer is
   not placed at all.
+
+The shared `spatial-audio.runtime.ts` listener now follows the complete camera world
+pose for the organ. The organ does not write the listener or resume/close the
+context. Its existing equal-power layer mix and room sends remain unchanged.

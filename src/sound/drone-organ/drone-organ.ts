@@ -6,77 +6,44 @@
  *   composition is fixed; nothing about it is played live.
  * Responsibility: Own the organ's lifetime and the per-frame contract the show
  *   drives it through.
- * Boundary: Tone.js and the whole audio graph hang below `organ-runtime.ts`,
- *   which this file loads only once a show actually asks for the organ. When
- *   a voice sounds, and to what pulse, is decided in `src/dramaturgy`.
+ * Boundary: Run owns the shared Tone context; this lazy follower owns the
+ *   organ graph below `organ-runtime.ts`. Voice timing comes from dramaturgy.
  */
 
-import type { OrganVoiceName } from "../../dramaturgy/organ-score";
-import type { OrganPlacementGroup } from "./drone-organ-settings";
+import type { SpatialAudio } from "../spatial-audio";
+import type { DroneOrgan, DroneOrganOptions } from "./organ-frame";
 import type { OrganRuntime } from "./organ-runtime";
-import type { ListenerPose } from "./organ-signals";
-import type { OrganClock } from "./organ-timeline";
-
-export interface DroneOrganOptions {
-  /** One beat of the score's pulse, in show seconds. */
-  readonly pulseSeconds: number;
-}
 
 /**
- * What the show hands the organ each frame. Time is the show clock's: the
- * organ has no transport, and every step it plays is derived from
- * `showTimeSeconds`, so a seek lands where playing through would have.
+ * Lazily build organ followers on the Run-owned Tone context. The organ owns
+ * its nodes and pending import; it neither writes listener pose nor closes
+ * the borrowed context. A cancelled import never publishes live voices.
  */
-export interface DroneOrganFrame extends OrganClock {
-  /** How strongly each voice sounds, 0..1, as the score derives it. */
-  readonly voiceStrengths: Readonly<Record<OrganVoiceName, number>>;
-
-  readonly listener: ListenerPose;
-
-  /** World height under the listener; the height signal is measured from it. */
-  readonly groundYMeters: number;
-
-  /**
-   * Tightly packed world xyz triples of one placement group's live clouds. An
-   * empty array is a legitimate answer: the group's module may be unloaded, or
-   * the level may not carry it at all.
-   */
-  readonly readGroupCenters: (group: OrganPlacementGroup) => Float32Array;
-}
-
-export interface DroneOrgan {
-  readonly update: (frame: DroneOrganFrame) => void;
-
-  /** Part of the explicit lifecycle; the organ owns every node it built. */
-  readonly unload: () => void;
-}
-
-/**
- * Start the organ. Tone.js arrives with the dynamic import below and not
- * before: importing it builds an AudioContext of its own — the one the organ
- * then plays on — and a benchmark run or a bare level page must not pay for
- * one. Until the import lands the returned organ accepts frames and does
- * nothing with them.
- */
-export function createDroneOrgan(options: DroneOrganOptions): DroneOrgan {
+export function createDroneOrgan(
+  options: DroneOrganOptions,
+  audio: SpatialAudio,
+): DroneOrgan {
   let runtime: OrganRuntime | undefined;
-  let isUnloaded = false;
-
-  void import("./organ-runtime").then(({ startOrganRuntime }) => {
-    if (isUnloaded) return;
-
-    runtime = startOrganRuntime(options);
-  });
+  const cancellation = new AbortController();
+  let unloading: Promise<void> | undefined;
+  const loading = import("./organ-runtime").then(
+    async ({ startOrganRuntime }) => {
+      runtime = await startOrganRuntime(options, audio, cancellation.signal);
+    },
+  );
+  // Observe a failed lazy start immediately; unload still returns that failure.
+  void loading.catch((error: unknown) =>
+    console.error("Organ startup failed", error),
+  );
 
   return {
     update: (frame): void => {
-      runtime?.update(frame);
+      if (!cancellation.signal.aborted) runtime?.update(frame);
     },
-
-    unload: (): void => {
-      isUnloaded = true;
-      runtime?.dispose();
-      runtime = undefined;
+    unload: (): Promise<void> => {
+      cancellation.abort();
+      unloading ??= loading.then(() => runtime?.unload());
+      return unloading;
     },
   };
 }

@@ -38,10 +38,6 @@ describe("the piece schedule", () => {
     );
   });
 
-  test("starts at or after the beginning of the show", () => {
-    expect(CUES[0]?.atSeconds).toBeGreaterThanOrEqual(0);
-  });
-
   test("opens on a lead-in before the first word", () => {
     expect(CUES[0]?.atSeconds).toBe(LEAD_IN_SECONDS);
   });
@@ -150,7 +146,9 @@ describe("the piece schedule", () => {
   });
 
   test("resolves its cues to files served from the audio folder", () => {
-    expect(narrationUrl("prologue", "en")).toBe("/audio/en/1.mp3");
-    expect(narrationUrl("return", "de")).toBe("/audio/de/8.mp3");
+    expect(narrationUrl("prologue", "en")).toBe(
+      "/audio/narration/en/prologue.mp3",
+    );
+    expect(narrationUrl("return", "de")).toBe("/audio/narration/de/return.mp3");
   });
 });

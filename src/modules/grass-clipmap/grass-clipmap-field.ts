@@ -95,6 +95,18 @@ export function createGrassClipmapField(
     for (const chunk of level.chunks) group.add(chunk);
   }
 
+  try {
+    for (const level of levels) {
+      for (const perTier of level.materials) {
+        for (const material of perTier)
+          applyMaterialEffects(options.effects ?? [], material);
+      }
+    }
+  } catch (error) {
+    dispose();
+    throw error;
+  }
+
   const windClock = { seconds: 0 };
   const frustum = new Frustum();
   const viewProjection = new Matrix4();
@@ -170,17 +182,19 @@ export function createGrassClipmapField(
       shared.uGrassHeightPlacement.value.copy(options.heightField.placement);
     },
 
-    dispose: () => {
-      for (const level of levels) {
-        for (const perDetail of level.geometries) {
-          for (const geometry of perDetail) geometry.dispose();
-        }
-        for (const perTier of level.materials) {
-          for (const material of perTier) material.dispose();
-        }
-      }
-    },
+    dispose,
   };
+
+  function dispose(): void {
+    for (const level of levels) {
+      for (const perDetail of level.geometries) {
+        for (const geometry of perDetail) geometry.dispose();
+      }
+      for (const perTier of level.materials) {
+        for (const material of perTier) material.dispose();
+      }
+    }
+  }
 }
 
 /**
@@ -447,11 +461,31 @@ function createLevel(context: {
       ),
     );
 
-  // The bounding sphere has to hold the whole chunk, not the blade template,
-  // or the per-chunk frustum culling is simply wrong.
+  // The shader varies fade distance by ±5%; beyond it every blade degenerates.
+  const maximumDistance = settings.fade.endMeters * 1.05;
+  const maximumSpacing =
+    1 /
+    Math.sqrt(Math.max(getLawDensity(maximumDistance, options.preset), 1e-4));
+  const scatterRadius = maximumSpacing * settings.density.jitter * Math.SQRT1_2;
+  // Match the shader's random, angular, and spacing-based width maxima.
+  const halfWidth =
+    Math.max(
+      options.preset.bladeWidthMeters * 1.28,
+      maximumDistance * settings.blade.minAngularWidth,
+      maximumSpacing * 0.26,
+    ) * 0.5;
+  const { range } = options.heightField;
+  // Wind bends an arc of at most bladeHeightMeters; it never lengthens it.
   const bounds = new Sphere(
-    new Vector3(chunkSizeMeters * 0.5, 1, chunkSizeMeters * 0.5),
-    chunkSizeMeters * 0.7072 + 5,
+    new Vector3(
+      chunkSizeMeters * 0.5,
+      range.x + range.y * 0.5,
+      chunkSizeMeters * 0.5,
+    ),
+    Math.hypot(chunkSizeMeters * Math.SQRT1_2, range.y * 0.5) +
+      scatterRadius +
+      options.preset.bladeHeightMeters +
+      halfWidth,
   );
 
   const uGrassChunkSize = { value: chunkSizeMeters };
@@ -494,10 +528,6 @@ function createLevel(context: {
           ...stepUniforms[step],
         },
       });
-      // Every tier and step is its own material object, but the patched
-      // sources are identical per tier, so three still compiles one program
-      // per tier and keys the rest to its cache.
-      applyMaterialEffects(effects, material);
       return material;
     }),
   );

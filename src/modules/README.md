@@ -1,6 +1,6 @@
 <!--
 Purpose: Document ownership rules for unloadable world and perception modules.
-Context: Level Runtime composes enabled features over permanent World infrastructure.
+Context: Level Composition constructs enabled features over permanent World infrastructure.
 Responsibility: Summarize current module categories and cross-module contracts.
 Boundary: Concrete modules do not import siblings or own the global render loop.
 -->
@@ -15,11 +15,13 @@ dispose everything they create.
 
 - Terrain renders World Surface height in recycled meshes.
 - Vegetation and Rocks render deterministic compact instanced populations.
-- Animals owns ten bounded actors, visibility, animation, and movement.
+- Animals owns twenty bounded actors, visibility, animation, and movement.
+- Snakes owns one instanced pool of procedurally rebuilt bodies that crawl
+  open ground, streamed through the shared chunk window and candidate grid.
 - Air and Scent Particles own bounded points buffers.
-- Grass Clipmap is the narrative grass path; legacy Grass remains in diagnostic
-  presets pending issue #13.
-- Motion Sense owns point actors and GPU-aged trail rings.
+- Grass Clipmap is the sole grass renderer for narrative and diagnostic presets.
+- Motion Sense owns point actors, GPU-aged trail rings, and an optional
+  instanced pool of bird bodies.
 - Magnetic Sense owns one camera-following sky dome and patches no sibling.
 - Mycelium/Connections owns fixed network draws and a module-specific topology
   worker.
@@ -29,7 +31,7 @@ dispose everything they create.
 
 ## Boundaries
 
-Concrete modules never import siblings. Level Runtime wires narrow neutral
+Concrete modules never import siblings. Level Composition wires narrow neutral
 contracts for world facts, material effects, live bodies, motion positions,
 scent sources, and connection nodes. Consumer-specific placement, rendering,
 settings, capacity, and disposal remain with the consumer.
@@ -41,3 +43,14 @@ their data and fixed pools.
 `atmosphere`, `paths`, and `rivers` are README-only reserved extension
 boundaries. They are not implemented modules and should remain empty until a
 concrete issue requires them.
+
+## Public interface and resource ownership
+
+`WorldModule` describes the shared content lifecycle. A returned handle may
+also expose specific drivers or sources; material effects and pure sources do
+not need an artificial module lifecycle. Their inputs/outputs are wired by
+Composition and must state any borrowed-buffer validity. Run-owned GLTF sources
+are borrowed; module-created derivatives, pools and workers are released locally.
+Operator UI never imports a concrete content implementation. Adopt role names
+with the affected owner refactor under the [Development guide](../../docs/development.md),
+without generating companion files or recreating retired modules.

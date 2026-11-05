@@ -2,7 +2,7 @@
 Purpose: Explain what is verified about the conductor page.
 Context: The page is DOM-bound, but the decisions behind it are not.
 Responsibility: Route conductor tests and say what they deliberately leave out.
-Boundary: The implementation lives in ../../src/conductor.
+Boundary: The implementation lives in ../../src/ui/conductor.
 -->
 
 # Conductor tests
@@ -12,11 +12,18 @@ before touching the DOM is:
 
 `conductor-keys.test.ts` covers the key map, including the presses the page
 must leave alone: browser shortcuts and anything typed into a field.
-`show-actions.test.ts` covers the operator's command surface over the show it
-hosts — above all that the composite resets fire in the right order: restart
-is rewind, flight reset, then play; reset is rewind, then hold.
+Show commands are exercised at their owner by the existing isolated Show/audio
+lifetime test in `tests/sound/drone-organ-composition.test.ts`. Browser checks
+exercise transport, language, drag/release/cancel and time/flight reset. The
+[live-language suite](../browser/README.md#live-language-regression) also exercises
+the initially paused tutorial, delayed/failed speech, rapid selection and cleanup.
+Stop restarts the tutorial on the same Run; language replacement never restarts
+it. Neither check establishes full visitor-lifecycle acceptance under #9.
 `stream-button.test.ts` covers the whole availability × session matrix behind
-the headset button's one label. `time-format.test.ts` covers the readouts an
+the headset button's one state. `operator-language.test.ts` pins which page
+language a station opens in; `conductor-copy.test.ts` keeps both catalogues
+complete, names every piece cue and matches every `data-copy` key declared in
+`src/ui/conductor.html`. `time-format.test.ts` covers the readouts an
 operator scans mid-show, chapter names included.
 
 Slot and headroom arithmetic is not here either — it belongs to the schedule it

@@ -1,16 +1,16 @@
+import { resolve } from "node:path";
 import { defineConfig, type Plugin } from "vite";
-import { levelNameFromPath } from "./src/levels/level-names.ts";
-import { STATION_SETTINGS } from "./src/station/station-settings";
+import { levelNameFromPath } from "./shared/level-routes.ts";
 
 function rewriteLevelRequest(request: { url?: string }): void {
   if (!request.url) return;
 
   const url = new URL(request.url, "http://localhost");
   if (!levelNameFromPath(url.pathname)) return;
-  request.url = `/test.html${url.search}`;
+  request.url = `/${url.search}`;
 }
 
-/** Keep stable /echo-style links while serving their explicit Test entry. */
+/** Keep stable /echo-style links while serving the root experience page. */
 const levelEntryRoutes: Plugin = {
   name: "level-entry-routes",
   configureServer(server) {
@@ -27,38 +27,35 @@ const levelEntryRoutes: Plugin = {
   },
 };
 
-// The pages reach the station server through their own origin (/config); in
-// development that server is the separate `bun run station` process, so Vite
-// forwards the path. With no server running the proxy errors and the pages
-// fail soft, exactly as they do in production.
-const stationProxy = {
-  "/config": {
-    target: `http://localhost:${STATION_SETTINGS.port}`,
-  },
-} as const;
-
 export default defineConfig({
+  root: resolve(import.meta.dirname, "src/ui"),
+  publicDir: resolve(import.meta.dirname, "public"),
   plugins: [levelEntryRoutes],
+  resolve: {
+    // Browser bootstraps are siblings of the HTML root in both dev and build.
+    alias: {
+      "/entry": resolve(import.meta.dirname, "src/entry"),
+    },
+  },
   build: {
-    rollupOptions: {
+    outDir: resolve(import.meta.dirname, "dist"),
+    emptyOutDir: true,
+    rolldownOptions: {
       // Listing the entries replaces Vite's default index.html discovery, so
       // the show page has to be named here beside the conductor page.
       input: {
-        main: "index.html",
-        test: "test.html",
-        conductor: "conductor.html",
-        flash: "flash.html",
+        main: resolve(import.meta.dirname, "src/ui/index.html"),
+        conductor: resolve(import.meta.dirname, "src/ui/conductor.html"),
+        flash: resolve(import.meta.dirname, "src/ui/flash.html"),
       },
     },
   },
   server: {
     host: true,
     allowedHosts: ["dev.strehk.eu", "dev.e.strehk.eu"],
-    proxy: stationProxy,
   },
   preview: {
     host: true,
     allowedHosts: ["dev.strehk.eu", "dev.e.strehk.eu"],
-    proxy: stationProxy,
   },
 });

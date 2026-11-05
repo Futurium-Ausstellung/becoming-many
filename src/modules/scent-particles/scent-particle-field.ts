@@ -14,7 +14,7 @@ import {
   type PointsMaterial,
 } from "three";
 import type { ChunkAssignment } from "../../world/chunk-system";
-import type { PlantScentSource } from "../scent-sources";
+import type { PlantScentGroupId, PlantScentSource } from "../scent-sources";
 import {
   createScentParticleMaterial,
   type ScentParticleMaterial,
@@ -76,7 +76,7 @@ export interface ScentParticleField {
   readonly renderedColors: Float32Array;
   readonly renderedPhases: Float32Array;
   readonly renderedRises: Float32Array;
-  readonly renderedVisibility: Float32Array;
+  readonly renderedVisibility: Uint8Array;
   readonly positionAttribute: BufferAttribute;
   readonly colorAttribute: BufferAttribute;
   readonly phaseAttribute: BufferAttribute;
@@ -109,9 +109,7 @@ export function createScentParticleField({
   const renderedColors = new Float32Array(valuesPerChunk * chunkSlotCount);
   const renderedPhases = new Float32Array(particlesPerChunk * chunkSlotCount);
   const renderedRises = new Float32Array(particlesPerChunk * chunkSlotCount);
-  const renderedVisibility = new Float32Array(
-    particlesPerChunk * chunkSlotCount,
-  );
+  const renderedVisibility = new Uint8Array(particlesPerChunk * chunkSlotCount);
   const positionAttribute = new BufferAttribute(
     renderedPositions,
     COMPONENTS_PER_VALUE,
@@ -177,14 +175,14 @@ interface ScentPlantRecord {
   groundY: number;
   worldZ: number;
   heightMeters: number;
-  groupIndex: number;
+  groupId: PlantScentGroupId;
 }
 
 /**
  * The resumable write of one chunk slot. A dense forest chunk holds thousands
  * of particles, which is far more than one frame slice should spend, so the
- * write is gathered once and then spent in bounded steps. The GPU keeps the
- * previous chunk until the last step uploads, so a slot is never half new.
+ * write is gathered once and then spent in bounded steps. Reassigned slots
+ * stay hidden until the complete current write is published.
  */
 export interface ScentChunkWriter {
   readonly assignment: ChunkAssignment;
@@ -236,7 +234,8 @@ export function writeNextScentStep(
     writer.nextPlant += 1;
     if (!plant) continue;
 
-    const signature = field.signatures[plant.groupIndex];
+    const groupIndex = field.plantSource.groupIds.indexOf(plant.groupId);
+    const signature = field.signatures[groupIndex];
     if (!signature) continue;
     const nextCursor = writer.particleCursor + signature.particlesPerPlant;
 
@@ -247,7 +246,7 @@ export function writeNextScentStep(
 
     writePlantParticles(field, writer.assignment, {
       signature,
-      groupIndex: plant.groupIndex,
+      groupIndex,
       plantIndex: writer.nextPlant - 1,
       firstParticleIndex: writer.particleCursor,
       worldX: plant.worldX,
@@ -259,40 +258,41 @@ export function writeNextScentStep(
     written += signature.particlesPerPlant;
   }
 
-  return writer.nextPlant >= writer.plants.length;
+  const complete = writer.nextPlant >= writer.plants.length;
+  if (complete) {
+    field.renderedVisibility.fill(
+      1,
+      writer.assignment.slotIndex * field.particlesPerChunk,
+      writer.particleCursor,
+    );
+  }
+  return complete;
 }
 
 /**
  * Replay one absolute chunk's plants. Absolute chunk coordinates seed every
- * random value, so revisiting a chunk recreates the same scent. The slot is
- * hidden first: a chunk with fewer plants than the worst case leaves the tail
- * unused, and a stale tail would keep the previous chunk's particles alive.
+ * random value, so revisiting a chunk recreates the same scent. Its slot is
+ * already hidden by initial allocation or reassignment.
  */
 function gatherChunkPlants(
   field: ScentParticleField,
   writer: ScentChunkWriter,
 ): void {
   const { assignment } = writer;
-  const slotStart = assignment.slotIndex * field.particlesPerChunk;
-  field.renderedVisibility.fill(
-    0,
-    slotStart,
-    slotStart + field.particlesPerChunk,
-  );
   writer.gathered = true;
-  writer.particleCursor = slotStart;
+  writer.particleCursor = assignment.slotIndex * field.particlesPerChunk;
 
   field.plantSource.appendChunkPlants(
     assignment.chunkX,
     assignment.chunkZ,
     field.chunkSize,
-    (worldX, groundY, worldZ, heightMeters, groupIndex) => {
+    (worldX, groundY, worldZ, heightMeters, groupId) => {
       writer.plants.push({
         worldX,
         groundY,
         worldZ,
         heightMeters,
-        groupIndex,
+        groupId,
       });
     },
   );
@@ -312,6 +312,24 @@ export function initializeScentParticleSlots(
       // Startup is synchronous; recycled chunks spend one step per frame.
     }
   }
+}
+
+/** Hide an invalid assignment before any queued replacement can run. */
+export function hideScentParticleSlot(
+  field: ScentParticleField,
+  slotIndex: number,
+): void {
+  const particleStart = slotIndex * field.particlesPerChunk;
+  field.renderedVisibility.fill(
+    0,
+    particleStart,
+    particleStart + field.particlesPerChunk,
+  );
+  field.visibilityAttribute.addUpdateRange(
+    particleStart,
+    field.particlesPerChunk,
+  );
+  field.visibilityAttribute.needsUpdate = true;
 }
 
 /** Request a partial GPU upload for one finished slot and nothing else. */
@@ -400,7 +418,6 @@ function writePlantParticles(
       PARTICLE_RANDOM_PHASE,
     );
     field.renderedRises[particleOffset] = signature.riseHeightMeters;
-    field.renderedVisibility[particleOffset] = 1;
   }
 }
 

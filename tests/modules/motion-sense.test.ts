@@ -19,14 +19,14 @@ import {
   Scene,
   Vector3,
 } from "three";
-import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
-import {
-  BIRD_BODY_ASSET,
-  createBirdBodies,
-} from "../../src/modules/motion-sense/bird-bodies";
+import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
+import { createBirdBodies } from "../../src/modules/motion-sense/bird-bodies";
 import { createBirdFlocks } from "../../src/modules/motion-sense/bird-flocks";
 import { createFlySwarms } from "../../src/modules/motion-sense/fly-swarms";
-import { createMotionSenseModule } from "../../src/modules/motion-sense/motion-sense";
+import {
+  createMotionSenseModule,
+  type MotionSenseModuleOptions,
+} from "../../src/modules/motion-sense/motion-sense";
 import {
   MOTION_SENSE_SETTINGS,
   type MotionSenseParameters,
@@ -37,7 +37,7 @@ import {
   accumulateEnvelopePull,
   createSwarmShapes,
 } from "../../src/modules/motion-sense/swarm-shape";
-import type { Viewpoint } from "../../src/world/viewer-rig";
+import type { Viewpoint } from "../../src/world/viewpoint";
 
 describe("Motion Trail material", () => {
   test("patches GPU aging, size fade, and the circle shape", () => {
@@ -49,9 +49,12 @@ describe("Motion Trail material", () => {
     });
     const shader = compileMaterialForTest(material.pointsMaterial);
 
-    expect(shader.vertexShader).toContain("expandMotionTrailParticle");
-    expect(shader.vertexShader).toContain("motionSpawnFrame");
-    expect(shader.vertexShader).toContain("getMotionTrailClipPosition");
+    expect(shader.vertexShader).toContain(
+      "transformed = expandMotionTrailParticle(transformed);",
+    );
+    expect(shader.vertexShader).toContain(
+      "gl_Position = getMotionTrailClipPosition(gl_Position);",
+    );
     expect(shader.vertexShader).toContain(
       "gl_PointSize *= getMotionTrailSizeScale();",
     );
@@ -368,6 +371,32 @@ describe("Fly swarms", () => {
     for (let fly = 0; fly < arrival.count; fly += 1) {
       expect(arrival.getX(fly)).toBe(1);
     }
+    swarms.dispose();
+  });
+
+  test("spreads each fly's place in the sense fade so swarms gather speck by speck", () => {
+    const parameters = createMotionParameters();
+    const swarms = createFlySwarms({
+      parameters,
+      groundYAt: () => 0,
+      zoneAt: () => "meadow",
+      initialPlayerX: 0,
+      initialPlayerZ: 0,
+    });
+    const senseArrival = swarms.points.geometry.getAttribute("flySenseArrival");
+
+    expect(senseArrival.count).toBe(
+      parameters.swarms.swarmCount * parameters.swarms.fliesPerSwarm,
+    );
+    const values = new Set<number>();
+    for (let fly = 0; fly < senseArrival.count; fly += 1) {
+      const value = senseArrival.getX(fly);
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThan(1);
+      values.add(value);
+    }
+    // One shared value would put the whole field on screen in one frame.
+    expect(values.size).toBeGreaterThan(senseArrival.count / 2);
     swarms.dispose();
   });
 });
@@ -738,20 +767,31 @@ describe("Bird flocks", () => {
 });
 
 describe("Motion Sense module", () => {
-  test("keeps two fixed draws through the whole lifecycle", () => {
+  test("rejects invalid intensity and keeps two fixed draws through the lifecycle", () => {
     const scene = new Scene();
     const viewerPosition = new Vector3();
     const viewpoint: Viewpoint = {
       worldPosition: viewerPosition,
+      worldBodyDirection: new Vector3(0, 0, -1),
+      worldDirection: new Vector3(0, 0, -1),
+      worldUp: new Vector3(0, 1, 0),
+      viewHalfAngleRadians: Math.PI / 4,
       viewDistanceMeters: 128,
     };
-    const { module } = createMotionSenseModule({
+    const options: MotionSenseModuleOptions = {
       scene,
       viewpoint,
       parameters: createMotionParameters(),
       groundYAt: () => 0,
       zoneAt: () => "meadow",
-    });
+    };
+    expect(() =>
+      createMotionSenseModule({
+        ...options,
+        parameters: createMotionParameters({ intensity: 2 }),
+      }),
+    ).toThrow(new RangeError("Motion intensity must be between zero and one"));
+    const { module } = createMotionSenseModule(options);
 
     module.load();
     expect(scene.children).toHaveLength(2);
@@ -783,6 +823,10 @@ describe("Motion Sense module", () => {
     const viewerPosition = new Vector3();
     const viewpoint: Viewpoint = {
       worldPosition: viewerPosition,
+      worldBodyDirection: new Vector3(0, 0, -1),
+      worldDirection: new Vector3(0, 0, -1),
+      worldUp: new Vector3(0, 1, 0),
+      viewHalfAngleRadians: Math.PI / 4,
       viewDistanceMeters: 128,
     };
     const { module } = createMotionSenseModule({
@@ -820,6 +864,10 @@ describe("Motion Sense module", () => {
     const scene = new Scene();
     const viewpoint: Viewpoint = {
       worldPosition: new Vector3(),
+      worldBodyDirection: new Vector3(0, 0, -1),
+      worldDirection: new Vector3(0, 0, -1),
+      worldUp: new Vector3(0, 1, 0),
+      viewHalfAngleRadians: Math.PI / 4,
       viewDistanceMeters: 128,
     };
     const birds = { ...createBirdParameters(), trailLifetimeFrames: 9 };
@@ -858,35 +906,30 @@ describe("Motion Sense module", () => {
 
     module.unload();
   });
-
-  // The leak this guards: the pool draws a clone of the model, so disposing
-  // the pool leaves the loaded source untouched. Nothing else holds it, so
-  // the module that asked for it has to release it, exactly as the animal,
-  // rock and vegetation pools release theirs.
-  test("releases the loaded bird model when the sense unloads", () => {
+  test("draws bird bodies only while the sense stands and heat reveals them", () => {
     const scene = new Scene();
-    const viewpoint: Viewpoint = {
-      worldPosition: new Vector3(),
-      viewDistanceMeters: 128,
-    };
     const asset = createBirdGltf();
     const source = asset.scene.children[0];
     if (!(source instanceof Mesh)) throw new Error("Expected the model mesh");
     const sourceMaterial = source.material;
     if (Array.isArray(sourceMaterial)) throw new Error("Expected one material");
-
-    let releasedGeometries = 0;
-    let releasedMaterials = 0;
+    let releasedSources = 0;
     source.geometry.addEventListener("dispose", () => {
-      releasedGeometries += 1;
+      releasedSources += 1;
     });
     sourceMaterial.addEventListener("dispose", () => {
-      releasedMaterials += 1;
+      releasedSources += 1;
     });
-
-    const { module } = createMotionSenseModule({
+    const handle = createMotionSenseModule({
       scene,
-      viewpoint,
+      viewpoint: {
+        worldPosition: new Vector3(),
+        worldBodyDirection: new Vector3(0, 0, -1),
+        worldDirection: new Vector3(0, 0, -1),
+        worldUp: new Vector3(0, 1, 0),
+        viewHalfAngleRadians: Math.PI / 4,
+        viewDistanceMeters: 128,
+      },
       parameters: createMotionParameters({
         birds: {
           ...createBirdParameters(),
@@ -895,21 +938,28 @@ describe("Motion Sense module", () => {
       }),
       groundYAt: () => 0,
       zoneAt: () => "meadow",
-      birdBody: {
-        assets: new Map([[BIRD_BODY_ASSET.id, asset]]),
-        effects: [],
-      },
+      birdBody: { asset, effects: [] },
     });
 
-    module.load();
+    handle.module.load();
     // Flies, fly trails, bird trails, and the one instanced body pool.
     expect(scene.children).toHaveLength(4);
-    expect(releasedGeometries).toBe(0);
+    const pool = scene.children.find((child) => child instanceof InstancedMesh);
+    if (!pool) throw new Error("Expected the body pool");
+    expect(pool.visible).toBe(false);
 
-    module.unload();
+    handle.setBodyPresence(0);
+    handle.module.activate();
+    expect(pool.visible).toBe(false);
+    handle.setBodyPresence(0.5);
+    expect(pool.visible).toBe(true);
+    handle.module.deactivate();
+    expect(pool.visible).toBe(false);
+
+    // Run owns the loaded model: the module releases only its own clone.
+    handle.module.unload();
     expect(scene.children).toHaveLength(0);
-    expect(releasedGeometries).toBe(1);
-    expect(releasedMaterials).toBe(1);
+    expect(releasedSources).toBe(0);
   });
 });
 
@@ -1057,7 +1107,6 @@ function getSwarmCentroids(
   });
 }
 
-/** A bird-shaped stand-in: two metres of span, one of length, facing +z. */
 function createBirdGltf(): GLTF {
   const scene = new Group();
   scene.add(new Mesh(new BoxGeometry(2, 0.2, 1), new MeshBasicMaterial()));

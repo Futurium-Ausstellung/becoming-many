@@ -121,10 +121,15 @@ export function createGrassHeightField(
     return true;
   };
 
-  beginRecenter(options.cameraX, options.cameraZ);
-  while (!fillNextRows()) {
-    // The first window must be complete before the first frame; a partly
-    // filled one would root the whole field at the lowest elevation.
+  try {
+    beginRecenter(options.cameraX, options.cameraZ);
+    while (!fillNextRows()) {
+      // The first window must be complete before the first frame; a partly
+      // filled one would root the whole field at the lowest elevation.
+    }
+  } catch (error) {
+    texture.dispose();
+    throw error;
   }
 
   return {
@@ -170,7 +175,7 @@ function fillRow(
 }
 
 /**
- * Zones the world does not grow grass in stay bare, water and forest first.
+ * Weight module-owned cover by the shared visual zones; water stays bare.
  * Published because other modules have to know where the ground is covered —
  * deriving it from the zone thresholds a second time would fork the answer.
  */
@@ -179,9 +184,10 @@ export function getGrassZoneCoverage(
   worldX: number,
   worldZ: number,
 ): number {
-  const zone = worldSurface.zoneAt(worldX, worldZ);
-  const coverage: Partial<Record<string, number>> =
-    GRASS_CLIPMAP_SETTINGS.zoneCoverage;
-
-  return coverage[zone] ?? 0;
+  const influences = worldSurface.zoneInfluencesAt(worldX, worldZ);
+  const coverage = GRASS_CLIPMAP_SETTINGS.zoneCoverage;
+  return (
+    influences.meadow * coverage.meadow +
+    influences.shrubSlope * coverage.shrubSlope
+  );
 }

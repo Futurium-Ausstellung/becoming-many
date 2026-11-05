@@ -14,6 +14,7 @@ import {
   MeshBasicMaterial,
   PlaneGeometry,
 } from "three";
+import type { TerrainMaterialEffect } from "../../utils/asset-loader/material-effect";
 import type { ChunkAssignment } from "../../world/chunk-system";
 import type { WorldSurface } from "../../world-surface/world-surface";
 
@@ -61,26 +62,6 @@ export interface TerrainPresentation {
   readonly segmentsPerSide?: number;
 }
 
-export interface TerrainMaterialEffect {
-  readonly applyTo: (material: MeshBasicMaterial) => void;
-  readonly update?: (deltaSeconds: number) => void;
-
-  /** Declaring a sampler makes Terrain stream a per-vertex warmth attribute. */
-  readonly warmthAt?: (
-    worldX: number,
-    worldZ: number,
-    groundYMeters: number,
-  ) => number;
-
-  /**
-   * Declaring a sampler makes Terrain stream a per-vertex ground-cover
-   * attribute: how much of this surface something else already grows on. An
-   * effect that treats covered and bare ground differently reads it instead of
-   * deriving zones in GLSL, which would duplicate the zone thresholds.
-   */
-  readonly coverAt?: (worldX: number, worldZ: number) => number;
-}
-
 export interface TerrainGeometry {
   readonly group: Group;
   readonly worldSurface: WorldSurface;
@@ -114,7 +95,12 @@ export function createTerrainGeometry({
     presentation?.material ?? new MeshBasicMaterial({ color: TERRAIN_COLOR });
   material.opacity = clampedOpacity;
   material.transparent = clampedOpacity < 1;
-  for (const effect of effects) effect.applyTo(material);
+  try {
+    for (const effect of effects) effect.applyTo(material);
+  } catch (error) {
+    material.dispose();
+    throw error;
+  }
 
   const storesZoneConditions = presentation?.conditionsAt !== undefined;
   const storesThermalWarmth = effects.some(

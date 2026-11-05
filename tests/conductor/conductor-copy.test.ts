@@ -2,20 +2,27 @@
  * Purpose: Keep both languages of the conductor page complete.
  * Context: A station is read in one language all evening; a missing word
  *   would be found by staff mid-show rather than here.
- * Responsibility: Cover every catalogue leaf, and the chapter names against
- *   the piece's own cue ids.
+ * Responsibility: Cover every catalogue leaf, every declared HTML copy key,
+ *   and the chapter names against the piece's own cue ids.
  * Boundary: How each word reads is an editorial choice, not a test's; only
  *   presence, distinctness, and coverage are asserted.
  */
 
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { PIECE_SCHEDULE } from "../../src/dramaturgy/piece-schedule";
 import {
   CHAPTER_NAMES,
   CONDUCTOR_COPY,
   type ConductorCopy,
   OPERATOR_LANGUAGES,
-} from "../../src/conductor/conductor-copy";
-import { PIECE_SCHEDULE } from "../../src/dramaturgy/piece-schedule";
+} from "../../src/ui/conductor/conductor-copy";
+
+const CONDUCTOR_HTML = readFileSync(
+  join(import.meta.dirname, "../../src/ui/conductor.html"),
+  "utf8",
+);
 
 /** Every string a catalogue holds, including the ones behind functions. */
 function readWords(copy: ConductorCopy): readonly string[] {
@@ -27,7 +34,7 @@ function readWords(copy: ConductorCopy): readonly string[] {
       return;
     }
     if (typeof value === "function") {
-      walk((value as (input: never) => string)("1:23" as never));
+      walk((value as (...input: string[]) => string)("1:23", "4:56"));
       return;
     }
     if (typeof value === "object" && value !== null) {
@@ -37,6 +44,14 @@ function readWords(copy: ConductorCopy): readonly string[] {
 
   walk(copy);
   return words;
+}
+
+/** Keys the page declares through data-copy, data-copy-aria-label and data-copy-title. */
+function readDeclaredKeys(): readonly string[] {
+  return Array.from(
+    CONDUCTOR_HTML.matchAll(/\bdata-copy(?:-aria-label|-title)?="([^"]+)"/g),
+    (match) => match[1] ?? "",
+  );
 }
 
 describe("CONDUCTOR_COPY", () => {
@@ -62,7 +77,33 @@ describe("CONDUCTOR_COPY", () => {
         expect(CHAPTER_NAMES[language]).toHaveProperty(cue.cueId);
       }
     });
+
+    test(`${language} has every copy key the conductor page declares`, () => {
+      const keys = readDeclaredKeys();
+      expect(keys.length).toBeGreaterThan(0);
+      for (const key of keys) {
+        expect(Object.hasOwn(copy.text, key), key).toBe(true);
+      }
+    });
   }
+
+  test("every static copy entry is declared by the conductor page", () => {
+    const declared = new Set(readDeclaredKeys());
+    for (const key of Object.keys(CONDUCTOR_COPY.en.text)) {
+      expect(declared.has(key), key).toBe(true);
+    }
+  });
+
+  test("the HTML default is the English copy", () => {
+    for (const match of CONDUCTOR_HTML.matchAll(
+      /\bdata-copy="([^"]+)"[^>]*>([^<]*)</g,
+    )) {
+      const [, key = "", text = ""] = match;
+      expect(text.trim(), key).toBe(
+        CONDUCTOR_COPY.en.text[key as keyof ConductorCopy["text"]],
+      );
+    }
+  });
 
   test("an unknown cue still reads as its own id", () => {
     expect(CONDUCTOR_COPY.de.timeline.chapter("interlude")).toBe("Interlude");

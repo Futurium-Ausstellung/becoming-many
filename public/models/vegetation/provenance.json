@@ -1,0 +1,199 @@
+{
+  "version": 1,
+  "author": "Quaternius",
+  "license": "CC0-1.0",
+  "assets": [
+    {
+      "id": "pine-01",
+      "file": "/models/vegetation/pine-01.glb",
+      "sourcePage": "https://poly.pizza/m/79gmlLnweB",
+      "sourceDownload": "https://static.poly.pizza/082c2026-56af-4e3f-bea7-9ae5de71101f.glb",
+      "sha256": "21e70c57a2fafff20548bdf21b6fb88e60ac9b60ca673b48a8c8907704f0a4ed",
+      "metrics": {
+        "bytes": 2221308,
+        "nodes": 2,
+        "meshes": 1,
+        "materials": 2,
+        "textures": 3,
+        "images": 3,
+        "primitives": 2,
+        "vertices": 2960,
+        "triangles": 3370,
+        "estimatedDrawCalls": 2,
+        "animations": 0
+      },
+      "meshNames": ["Pine_4"]
+    },
+    {
+      "id": "pine-02",
+      "file": "/models/vegetation/pine-02.glb",
+      "sourcePage": "https://poly.pizza/m/igSu0cPoBz",
+      "sourceDownload": "https://static.poly.pizza/712aaefa-ae7f-4cb3-8834-a1b8860df3b2.glb",
+      "sha256": "3cc3cbad879cc99e8a278d01a546852b2f035c88a9ca2057e0f7691bea0e8ac4",
+      "metrics": {
+        "bytes": 2146688,
+        "nodes": 2,
+        "meshes": 1,
+        "materials": 2,
+        "textures": 3,
+        "images": 3,
+        "primitives": 2,
+        "vertices": 1621,
+        "triangles": 1646,
+        "estimatedDrawCalls": 2,
+        "animations": 0
+      },
+      "meshNames": ["Pine_5"]
+    },
+    {
+      "id": "pine-pack",
+      "file": "/models/vegetation/pine-pack.glb",
+      "sourcePage": "https://poly.pizza/m/w8ZaiYjK8C",
+      "sourceDownload": "https://static.poly.pizza/42a2a958-040d-4ce3-bae5-2332c1282cb5.glb",
+      "sha256": "59445ad9cffdd247b6565af4c86eaa8ce78edc6f413fbc056a7b1faeba120b0b",
+      "metrics": {
+        "bytes": 2674128,
+        "nodes": 6,
+        "meshes": 5,
+        "materials": 2,
+        "textures": 3,
+        "images": 3,
+        "primitives": 10,
+        "vertices": 7335,
+        "triangles": 10366,
+        "estimatedDrawCalls": 10,
+        "animations": 0
+      },
+      "meshNames": [
+        "PineTree_5",
+        "PineTree_4",
+        "PineTree_3",
+        "PineTree_1",
+        "PineTree_2"
+      ]
+    },
+    {
+      "id": "dead-tree-pack",
+      "file": "/models/vegetation/dead-tree-pack.glb",
+      "sourcePage": "https://poly.pizza/m/F5I0Q7TwO5",
+      "sourceDownload": "https://static.poly.pizza/65539ff7-ff6b-4036-ad02-8233b6ce748f.glb",
+      "sha256": "395c16b06f472580367cb94116cdacf2730cefb52126731ccb45075c660552d2",
+      "metrics": {
+        "bytes": 2743152,
+        "nodes": 6,
+        "meshes": 5,
+        "materials": 1,
+        "textures": 2,
+        "images": 2,
+        "primitives": 5,
+        "vertices": 9399,
+        "triangles": 15464,
+        "estimatedDrawCalls": 5,
+        "animations": 0
+      },
+      "meshNames": [
+        "DeadTree_10",
+        "DeadTree_9",
+        "DeadTree_8",
+        "DeadTree_7",
+        "DeadTree_6"
+      ]
+    },
+    {
+      "id": "birch-pack",
+      "file": "/models/vegetation/birch-pack.glb",
+      "sourcePage": "https://poly.pizza/m/R7qMWzb7nk",
+      "sourceDownload": "https://static.poly.pizza/457b2397-4bfb-41c4-862d-82d1592b2a5f.glb",
+      "sha256": "46367afd7ed32fc6e26f6b7b7aeaf00131d87659f3172228a0bbb61bf256e1c3",
+      "metrics": {
+        "bytes": 4193040,
+        "nodes": 6,
+        "meshes": 5,
+        "materials": 2,
+        "textures": 3,
+        "images": 3,
+        "primitives": 10,
+        "vertices": 31613,
+        "triangles": 27158,
+        "estimatedDrawCalls": 10,
+        "animations": 0
+      },
+      "meshNames": [
+        "BirchTree_3",
+        "BirchTree_5",
+        "BirchTree_4",
+        "BirchTree_1",
+        "BirchTree_2"
+      ]
+    },
+    {
+      "id": "deciduous-pack",
+      "file": "/models/vegetation/deciduous-pack.glb",
+      "sourcePage": "https://poly.pizza/m/etFGNvsiFv",
+      "sourceDownload": "https://static.poly.pizza/53a83125-e16a-4024-b8f6-1e72679c7ddf.glb",
+      "sha256": "6d1b2544b27497885ae0d84e0acf656abb64aef44a6425a9d59af6f47a4df57d",
+      "metrics": {
+        "bytes": 3406584,
+        "nodes": 6,
+        "meshes": 5,
+        "materials": 2,
+        "textures": 3,
+        "images": 3,
+        "primitives": 10,
+        "vertices": 36690,
+        "triangles": 32220,
+        "estimatedDrawCalls": 10,
+        "animations": 0
+      },
+      "meshNames": [
+        "NormalTree_1",
+        "NormalTree_2",
+        "NormalTree_3",
+        "NormalTree_4",
+        "NormalTree_5"
+      ]
+    },
+    {
+      "id": "bush",
+      "file": "/models/vegetation/bush.glb",
+      "sourcePage": "https://poly.pizza/m/EoTERLq3z2",
+      "sourceDownload": "https://static.poly.pizza/5d3066f4-58ac-46d4-899c-39d9e566e9df.glb",
+      "sha256": "a002f253d541c767abfb2201ab838e49dc6283b4da65f761b75df3deb2aa0820",
+      "metrics": {
+        "bytes": 164336,
+        "nodes": 2,
+        "meshes": 1,
+        "materials": 1,
+        "textures": 1,
+        "images": 1,
+        "primitives": 1,
+        "vertices": 1800,
+        "triangles": 900,
+        "estimatedDrawCalls": 1,
+        "animations": 0
+      },
+      "meshNames": ["Bush_Common"]
+    },
+    {
+      "id": "flowering-bush",
+      "file": "/models/vegetation/flowering-bush.glb",
+      "sourcePage": "https://poly.pizza/m/U1ymDy8tbY",
+      "sourceDownload": "https://static.poly.pizza/af83abca-9b41-4229-9652-e336a5f5eaba.glb",
+      "sha256": "d7ce595860de17488de9757f329801d40a8301448bc9e916204ec77753e06b26",
+      "metrics": {
+        "bytes": 809140,
+        "nodes": 2,
+        "meshes": 1,
+        "materials": 2,
+        "textures": 2,
+        "images": 2,
+        "primitives": 2,
+        "vertices": 2304,
+        "triangles": 1368,
+        "estimatedDrawCalls": 2,
+        "animations": 0
+      },
+      "meshNames": ["Bush_Common_Flowers"]
+    }
+  ]
+}
