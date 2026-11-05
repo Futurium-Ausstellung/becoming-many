@@ -7,9 +7,8 @@ Boundary: Performance acceptance follows docs/development.md and docs/performanc
 
 # Production Browser Checks
 
-Use the existing station process to serve a current production build. Verify
-`git branch --show-current` is exactly `david_refactor` before building or
-writing artifacts. In one terminal:
+Use the existing station process to serve a current production build. In one
+terminal:
 
 ```sh
 bun run build

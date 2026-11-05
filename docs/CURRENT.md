@@ -5,9 +5,6 @@ scope, dependencies, acceptance criteria, and results.
 
 ## Development checkpoint
 
-- Branch: `david_refactor` only. Completed, verified blocks are committed and
-  pushed to `origin/david_refactor`; `main` and additional branches are out of
-  scope.
 - Checkpoint before clearing the Start level: `296e6be`.
 - Active architecture work: [#118](https://github.com/Strehk/becoming-many/issues/118),
   [#119](https://github.com/Strehk/becoming-many/issues/119),

@@ -5,8 +5,7 @@ and reuse over wrappers, new abstractions, or parallel mechanisms.
 
 ## Workflow
 
-1. Define the concrete visible result and affected files. Verify
-   `git branch --show-current` is exactly `david_refactor`, inspect status, and
+1. Define the concrete visible result and affected files. Inspect status and
    preserve unrelated changes.
 2. Name each affected owner, its inputs, outputs, necessary state, and resource
    cleanup. Read the current issue, prerequisites, and relevant history.
@@ -17,12 +16,9 @@ and reuse over wrappers, new abstractions, or parallel mechanisms.
 5. Run repository lint and one targeted verification pass, including the real
    interaction for browser work. Repair failures and rerun only affected checks.
 6. Record the concise result and limitations in the owning issue, update only
-   affected canonical facts, commit, push to `origin/david_refactor`, and verify
-   synchronization.
+   affected canonical facts, commit, push, and verify synchronization.
 
-Never change, merge, rebase, or push `main`; create no additional feature branch
-or worktree and never force-push. Completed targeted blocks may be committed and
-pushed under the standing project authorization.
+Never force-push.
 
 ## Verification selection
 
