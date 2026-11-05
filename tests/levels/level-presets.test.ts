@@ -35,7 +35,7 @@ void invalidVegetation;
 
 test("every level authors the current terrain-relative flight ceiling", () => {
   for (const preset of Object.values(LEVEL_CATALOG)) {
-    expect(preset.maximumGroundClearanceMeters).toBe(50);
+    expect(preset.maximumGroundClearanceMeters).toBe(40);
   }
 });
 

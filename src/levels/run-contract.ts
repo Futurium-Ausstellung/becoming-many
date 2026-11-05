@@ -76,7 +76,7 @@ export interface StaticLevelRequest extends CommonLevelRequest {
 }
 
 export interface ShowLevelRequest extends CommonLevelRequest {
-  /** Operator entry waits for Play; audience entry retains automatic tutorial playback. */
+  /** Operator entry waits for Play; audience entry starts playing on its own. */
   readonly initiallyPaused?: boolean;
   readonly kind: "show";
   readonly show: ShowRequest;

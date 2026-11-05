@@ -10,7 +10,7 @@ test("Run restarts tutorial across phases and owns pending restart cleanup", asy
       import { mock } from "bun:test";
       import assert from "node:assert/strict";
       import { ModuleRuntime } from "./src/world/module-runtime.ts";
-      const modules = [], worlds = [], audioOwners = [];
+      const modules = [], worlds = [], audioOwners = [], heightRequests = [];
       let frame, resetCount = 0, tutorialLoads = 0, gate;
       const tick = () => new Promise(resolve => setTimeout(resolve, 0));
       const createModule = name => {
@@ -60,7 +60,7 @@ test("Run restarts tutorial across phases and owns pending restart cleanup", asy
           return world;
         },
         composeControls: () => ({ resetRig(){resetCount++;},
-          flight:{update(){}}, constrainHeight(){} }),
+          flight:{update(){}}, constrainHeight(limits){heightRequests.push(limits);} }),
         composeLevel: async ({level, language}) => {
           if(level.tutorial) tutorialLanguages.push(language);
           if(level.tutorial && gate) await gate.promise;
@@ -169,7 +169,16 @@ test("Run restarts tutorial across phases and owns pending restart cleanup", asy
       assert.equal(worlds[0].ends,1);
 
       gate=undefined;
+      const heldPlain = await startLevel({}, {...request,tutorial:undefined,initiallyPaused:true});
+      assert.equal(playing,false,"operator entry waits for Play without a tutorial");
+      await heldPlain.unload();
+      const resetsBeforePlain = resetCount;
       const plain = await startLevel({}, {...request,tutorial:undefined});
+      assert.equal(playing,true,"audience entry plays without a tutorial");
+      assert.equal(resetCount,resetsBeforePlain+1,"Show opens from the arrival pose");
+      const arrival = {minimumGroundClearanceMeters:8,maximumGroundClearanceMeters:8};
+      assert.deepEqual(heightRequests.at(-1),arrival,"Show opens at the arrival height");
+      heightRequests.length = 0;
       running.seekTo(80);running.play();
       plain.setLanguage("en");
       assert.equal(plain.readLanguage(),"en");
@@ -178,6 +187,7 @@ test("Run restarts tutorial across phases and owns pending restart cleanup", asy
       plain.resetShowAndFlight();
       assert.equal(plain.show,running,"shows without a tutorial retain normal rewind behavior");
       assert.equal(showTime,0);assert.equal(playing,false);
+      assert.deepEqual(heightRequests,[arrival],"Stop returns to the arrival height");
       await plain.unload();
       assert.ok(resetCount>=4);
 

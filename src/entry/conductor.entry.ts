@@ -4,7 +4,6 @@ import { level as connectionsLevel } from "../levels/connections.level";
 import { startLevel } from "../levels/level.runtime";
 import { LEVEL_CATALOG } from "../levels/level-catalog";
 import type { Run } from "../levels/run-contract";
-import { level as tutorialLevel } from "../levels/start.level";
 /** Resolve browser inputs, start one Run and connect the operator UI. */
 import { mountConductorPage } from "../ui/conductor/conductor.page";
 import { resolveOperatorLanguage } from "../ui/conductor/operator-language";
@@ -43,7 +42,6 @@ try {
       kind: "show",
       initiallyPaused: true,
       preset: connectionsLevel,
-      tutorial: tutorialLevel,
       show: {
         schedule: PIECE_SCHEDULE,
         language: resolveNarrationLanguage(request.get("language")),
