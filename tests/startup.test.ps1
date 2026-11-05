@@ -25,6 +25,9 @@ function Assert-Throws {
     }
     throw "Expected failure: $Pattern"
 }
+# cmd.exe rejects a forward-slash path as its own argv[0], so the poller never runs.
+$stationConfig = Get-Content (Join-Path $project 'watchdog/station.yaml') -Raw
+Assert-True ($stationConfig -match '(?m)^\s*binary:\s*C:\\Windows\\System32\\cmd\.exe\s*$') 'station.yaml must launch cmd.exe through a backslash path.'
 $temporary = Join-Path ([IO.Path]::GetTempPath()) ('station-startup-' + [guid]::NewGuid())
 [void][IO.Directory]::CreateDirectory($temporary)
 try {
