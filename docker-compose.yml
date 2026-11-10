@@ -15,7 +15,7 @@ services:
     # Published by .github/workflows/release-image.yml on every release. The
     # station PC needs no toolchain; a first `up` pulls, and updating is an
     # explicit `docker compose pull` — never a surprise mid-exhibition.
-    image: ghcr.io/Futurium-Ausstellung/becoming-many:latest
+    image: ghcr.io/futurium-ausstellung/becoming-many:latest
     ports:
       - "${HOST_PORT:-80}:7823"
     environment:
@@ -29,7 +29,7 @@ services:
   # host: set M5_HOST=localhost:5183 in .env when using this profile.
   m5-sim:
     profiles: ["sim"]
-    image: ghcr.io/Futurium-Ausstellung/becoming-many:latest
+    image: ghcr.io/futurium-ausstellung/becoming-many:latest
     command: ["bun", "firmware/m5/tools/simulator.ts"]
     ports:
       - "${SIM_PORT:-5183}:5183"
