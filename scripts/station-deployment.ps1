@@ -4,7 +4,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $script:StationRoot = 'C:\becoming-many'
-$script:ReleaseImage = 'ghcr.io/strehk/becoming-many:latest'
+$script:ReleaseImage = 'ghcr.io/futurium-ausstellung/becoming-many:latest'
 
 function Invoke-Checked {
     param([string]$Command, [string[]]$Arguments)
@@ -103,7 +103,7 @@ function Get-ComposeArguments {
     if (Test-Path -LiteralPath $script:StatePath) {
         $state = Get-Content -LiteralPath $script:StatePath -Raw | ConvertFrom-Json
         $image = $state.services.station.image
-        if ($image -notmatch '^(becoming-many-local:[a-z0-9_.-]+|ghcr\.io/strehk/becoming-many@sha256:[a-f0-9]{64})$') {
+        if ($image -notmatch '^(becoming-many-local:[a-z0-9_.-]+|ghcr\.io/futurium-ausstellung/becoming-many@sha256:[a-f0-9]{64})$') {
             throw 'Invalid deployment state; refusing release fallback.'
         }
         $arguments += @('-f', $script:StatePath)
